@@ -12,9 +12,9 @@ Native SwiftUI download manager for iPhone and iPad. Minimum iOS 18.0.
 
 ## Install
 
-GitHub Actions tests and builds each main-branch change, then publishes an **unsigned IPA** in Releases. Sign/install it using your sideloading tool. Keep the same signing identity and bundle identifier for subsequent updates to preserve app data. Keep the Live Activity extension included when signing.
+GitHub Actions tests and builds each main-branch change, then publishes an **ad-hoc signed IPA** in Releases. Sign/install it using your sideloading tool. Keep the same signing identity and bundle identifier for subsequent updates to preserve app data. Keep the Live Activity extension included when signing.
 
-The AltStore / SideStore / FlareStore source is `https://raw.githubusercontent.com/soum91/fetchdock/main/source.json`. It becomes installable after the first successful release. Each source version includes the build number so installers recognize updates.
+The AltStore / SideStore / FlareStore source is `https://raw.githubusercontent.com/soum91/fetchdock/main/source.json`. It becomes installable after the first successful release. Each source version and both bundled Info.plist versions include the build number so installers recognize updates.
 
 ## Background behavior
 
@@ -38,4 +38,4 @@ python3 Tests/server.py
 xcodebuild test -project FetchDock.xcodeproj -scheme FetchDock -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
 ```
 
-The test suite validates URL handling, filename sanitization, queue serialization, real HTTP file integrity, HTTP failures, and pause/relaunch-reconciliation/resume behavior using the local server. Device testing remains necessary for actual Lock Screen background scheduling and sideload signing.
+The test suite validates URL handling, filename sanitization, queue serialization, real HTTP file integrity, HTTP failures, and pause/relaunch-reconciliation/resume behavior using the local server. Integration tests inject a regular delegate URLSession and isolated temporary storage because the hosted simulator cannot reliably connect to nsurlsessiond. Production initialization always uses a background session. Device testing remains necessary for system-managed background transfer scheduling, actual Lock Screen refreshes and sideload signing.

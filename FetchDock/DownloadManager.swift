@@ -15,10 +15,11 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     private var samples: [UUID: (Date, Int64)] = [:]
     private var lastSave = Date.distantPast
     private var reconciling = false
+    private let configurationOverride: URLSessionConfiguration?
     private let root: URL
     private let downloads: URL
     private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
+        let config = configurationOverride ?? URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
         config.waitsForConnectivity = true
@@ -36,10 +37,16 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     var activeCount: Int { items.filter { $0.status == .running }.count }
     var totalSpeed: Double { items.reduce(0) { $0 + ($1.status == .running ? $1.speed : 0) } }
 
-    override init() {
+    override convenience init() {
+        self.init(sessionConfiguration: nil, storageDirectory: nil, downloadsDirectory: nil)
+    }
+    // Dependency injection isolates integration tests from the host's background transfer daemon.
+    // Normal app initialization always uses the background configuration above.
+    init(sessionConfiguration: URLSessionConfiguration?, storageDirectory: URL?, downloadsDirectory: URL?) {
+        configurationOverride = sessionConfiguration
         let fm = FileManager.default
-        root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FetchDock", isDirectory: true)
-        downloads = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads", isDirectory: true)
+        root = storageDirectory ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FetchDock", isDirectory: true)
+        downloads = downloadsDirectory ?? fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads", isDirectory: true)
         super.init()
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)

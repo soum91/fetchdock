@@ -2,6 +2,11 @@ import XCTest
 @testable import FetchDock
 
 final class FetchDockTests: XCTestCase {
+    @MainActor
+    private func makeManager() -> DownloadManager {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        return DownloadManager(sessionConfiguration: .default, storageDirectory: root.appendingPathComponent("State"), downloadsDirectory: root.appendingPathComponent("Downloads"))
+    }
     func testOnlyHTTPLinksCanBecomeDownloads() {
         XCTAssertNotNil(DownloadItem.parseURL("https://example.com/archive.zip?token=abc"))
         XCTAssertNotNil(DownloadItem.parseURL(" http://localhost:8765/file \n"))
@@ -31,8 +36,8 @@ final class FetchDockTests: XCTestCase {
         XCTAssertEqual(restored.speed, 0)
     }
     @MainActor
-    func testBackgroundDownloadSavesFileAndHTTPFailureDoesNot() async throws {
-        let manager = DownloadManager.shared
+    func testDownloadSavesFileAndHTTPFailureDoesNot() async throws {
+        let manager = makeManager()
         for _ in 0..<100 where manager.restoring { try await Task.sleep(nanoseconds: 100_000_000) }
         XCTAssertFalse(manager.restoring)
         for item in manager.items { manager.remove(item.id) }
@@ -61,7 +66,7 @@ final class FetchDockTests: XCTestCase {
     }
     @MainActor
     func testPauseLeavesTransferPausedUntilExplicitResume() async throws {
-        let manager = DownloadManager.shared
+        let manager = makeManager()
         for _ in 0..<100 where manager.restoring { try await Task.sleep(nanoseconds: 100_000_000) }
         manager.enqueue(URL(string: "http://127.0.0.1:8765/slow")!)
         let id = try XCTUnwrap(manager.items.first?.id)

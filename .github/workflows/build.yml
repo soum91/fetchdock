@@ -8,13 +8,15 @@ permissions:
   contents: write
 concurrency:
   group: fetchdock-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -41,10 +43,16 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -R build/FetchDock.xcarchive/Products/Applications/FetchDock.app build/Payload/
+          APP=build/Payload/FetchDock.app
+          ACTIVITY="$APP/PlugIns/FetchDockActivity.appex"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0.${BUILD_NUMBER}" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0.${BUILD_NUMBER}" "$ACTIVITY/Info.plist"
+          codesign --force --sign - --timestamp=none "$ACTIVITY"
+          codesign --force --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict "$APP"
           cd build
           /usr/bin/zip -qry "FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" Payload
           cd ..
-          python3 scripts/update_source.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -62,6 +70,8 @@ jobs:
           gh release create "build-${BUILD_NUMBER}" "build/FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" --target "$GITHUB_SHA" --title "FetchDock 1.0.0 (build ${BUILD_NUMBER})" --notes-file RELEASE_NOTES.md --latest
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          python3 scripts/update_source.py
           git add source.json
           git commit -m "Update sideload source for build ${BUILD_NUMBER} [skip ci]"
           git push origin HEAD:main
