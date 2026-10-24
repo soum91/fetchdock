@@ -4,6 +4,6 @@ DerivedData/
 *.xcodeproj/
 *.xcworkspace/
 *.ipa
-__pycache__/
 FetchDock/Info.plist
 FetchDockActivity/Info.plist
+__pycache__/

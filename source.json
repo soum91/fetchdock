@@ -1,0 +1,25 @@
+{
+  "name": "FetchDock",
+  "identifier": "com.soum91.fetchdock.source",
+  "subtitle": "Your downloads, in motion",
+  "description": "Native download manager for iOS with background transfers and Live Activities.",
+  "iconURL": "https://raw.githubusercontent.com/soum91/fetchdock/main/FetchDock/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+  "website": "https://github.com/soum91/fetchdock",
+  "sourceURL": "https://raw.githubusercontent.com/soum91/fetchdock/main/source.json",
+  "tintColor": "#64F4CB",
+  "apps": [
+    {
+      "name": "FetchDock",
+      "bundleIdentifier": "com.soum91.fetchdock",
+      "developerName": "soum91",
+      "subtitle": "Your downloads, in motion",
+      "localizedDescription": "Native download manager with a persistent queue, background transfers, pause/resume, in-app browser, file previews, Files access, and Lock Screen / Dynamic Island Live Activities. iOS controls background progress refreshes. Resume support depends on the server. Requires iOS 18 or later.",
+      "iconURL": "https://raw.githubusercontent.com/soum91/fetchdock/main/FetchDock/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+      "tintColor": "#64F4CB",
+      "category": "utilities",
+      "versions": [],
+      "appPermissions": { "entitlements": [] }
+    }
+  ],
+  "news": []
+}

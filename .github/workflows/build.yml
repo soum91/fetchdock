@@ -1,0 +1,60 @@
+name: Build and release iOS
+on:
+  push:
+    branches: [main]
+    paths-ignore: [source.json, README.md]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: fetchdock-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Test downloads on iOS Simulator
+        run: |
+          python3 Tests/server.py > /tmp/fetchdock-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for r,ds in d["devices"].items() if "iOS" in r for x in ds if x["name"].startswith("iPhone")))')
+          xcodebuild test -project FetchDock.xcodeproj -scheme FetchDock -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO -resultBundlePath build/TestResults.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Archive for iPhone and iPad
+        run: |
+          xcodebuild archive -project FetchDock.xcodeproj -scheme FetchDock -configuration Release -destination 'generic/platform=iOS' -archivePath build/FetchDock.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CURRENT_PROJECT_VERSION=${{ github.run_number }}
+      - name: Package IPA and source
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p build/Payload
+          cp -R build/FetchDock.xcarchive/Products/Applications/FetchDock.app build/Payload/
+          cd build
+          /usr/bin/zip -qry "FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" Payload
+          cd ..
+          python3 scripts/update_source.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FetchDock-build-${{ github.run_number }}
+          path: |
+            build/*.ipa
+            build/TestResults.xcresult
+          if-no-files-found: ignore
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          gh release create "build-${BUILD_NUMBER}" "build/FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" --target "$GITHUB_SHA" --title "FetchDock 1.0.0 (build ${BUILD_NUMBER})" --notes-file RELEASE_NOTES.md --latest
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add source.json
+          git commit -m "Update sideload source for build ${BUILD_NUMBER} [skip ci]"
+          git push origin HEAD:main

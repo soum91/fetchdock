@@ -1,0 +1,77 @@
+name: FetchDock
+options:
+  bundleIdPrefix: com.soum91
+  deploymentTarget:
+    iOS: '18.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    MARKETING_VERSION: '1.0.0'
+    CURRENT_PROJECT_VERSION: '1'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    CODE_SIGNING_ALLOWED: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  FetchDock:
+    type: application
+    platform: iOS
+    sources: [FetchDock, Shared]
+    dependencies:
+      - target: FetchDockActivity
+    info:
+      path: FetchDock/Info.plist
+      properties:
+        CFBundleDisplayName: FetchDock
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.soum91.fetchdock
+            CFBundleURLSchemes: [fetchdock]
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsArbitraryLoadsInWebContent: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  FetchDockActivity:
+    type: app-extension
+    platform: iOS
+    sources: [FetchDockActivity, Shared]
+    info:
+      path: FetchDockActivity/Info.plist
+      properties:
+        CFBundleDisplayName: FetchDock Activity
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.activity
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  FetchDockTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes: [server.py, __pycache__]
+    dependencies:
+      - target: FetchDock
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  FetchDock:
+    build:
+      targets:
+        FetchDock: all
+    test:
+      targets: [FetchDockTests]
