@@ -14,6 +14,12 @@ final class FetchDockTests: XCTestCase {
             XCTAssertNil(DownloadItem.parseURL(link), link)
         }
     }
+    func testRemoteDownloadsRequireTLS() {
+        XCTAssertTrue(DownloadItem.canDownload(URL(string: "https://example.com/file")!))
+        XCTAssertTrue(DownloadItem.canDownload(URL(string: "http://127.0.0.1:8765/file")!))
+        XCTAssertFalse(DownloadItem.canDownload(URL(string: "http://example.com/file")!))
+        XCTAssertFalse(DownloadItem.canDownload(URL(string: "http://localhost.example.com/file")!))
+    }
     func testServerFilenameCannotEscapeDownloadDirectory() {
         for name in ["../../secret", "../..", "/tmp/file", "..\\..\\file", "\n", ".", "..", ""] {
             let safe = DownloadItem.safeName(name)

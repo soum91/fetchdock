@@ -183,7 +183,7 @@ private struct AddDownloadView: View {
     @State private var links = ""
     private var valid: Bool {
         let values = links.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return !values.isEmpty && values.allSatisfy { DownloadItem.parseURL($0) != nil }
+        return !values.isEmpty && values.allSatisfy { value in DownloadItem.parseURL(value).map { DownloadItem.canDownload($0) } ?? false }
     }
     var body: some View {
         NavigationStack {
@@ -193,7 +193,7 @@ private struct AddDownloadView: View {
                     Button("Paste links", systemImage: "doc.on.clipboard") { links = UIPasteboard.general.string ?? "" }
                 }
                 Section {
-                    Text("One http:// or https:// link per line. For sites requiring sign-in, use Browser and tap the site's download link.").font(.footnote).foregroundStyle(.secondary)
+                    Text("One HTTPS link per line. For sites requiring sign-in, use Browser and tap the site's download link.").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("New download").navigationBarTitleDisplayMode(.inline)
@@ -248,7 +248,7 @@ struct SettingsView: View {
                 }
                 Section("Files & privacy") {
                     Text("Downloads are saved on this iPhone under Files > On My iPhone > FetchDock > Downloads. Long-press a completed file to share it or save it elsewhere.")
-                    Text("Links and browser download cookies stay on this device. No FetchDock account, analytics or server. HTTP links are supported but are unencrypted.")
+                    Text("Links and browser download cookies stay on this device. No FetchDock account, analytics or server. Remote file downloads require HTTPS; the browser can still open HTTP pages.")
                 }.font(.footnote)
                 Section("FetchDock") {
                     LabeledContent("Version", value: "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"))")

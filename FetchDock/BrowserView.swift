@@ -90,6 +90,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
             message = "This link is not a direct HTTP download. Blob links and protected media streams need the website's own export option."
             return
         }
+        guard DownloadItem.canDownload(url) else {
+            message = "Use the site's HTTPS download link. FetchDock can browse HTTP pages, but remote file transfers require HTTPS."
+            return
+        }
         let referrer = webView.url?.absoluteString
         webView.evaluateJavaScript("navigator.userAgent") { userAgent, _ in
             self.webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in

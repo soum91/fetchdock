@@ -2,7 +2,7 @@
 
 Native SwiftUI download manager for iPhone and iPad. Minimum iOS 18.0.
 
-- Paste multiple HTTP/HTTPS file links into a persistent download queue.
+- Paste multiple HTTPS file links into a persistent download queue.
 - One to six simultaneous files, pause/resume, retry, speed, byte counts and estimated remaining time.
 - Background URLSession transfers with relaunch reconciliation and protected queue/resume storage.
 - Lock Screen and Dynamic Island Live Activity showing the current file and active transfer count.
@@ -20,11 +20,11 @@ The AltStore / SideStore / FlareStore source is `https://raw.githubusercontent.c
 
 Downloads use Apple's background transfer service, not a foreground timer. iOS can suspend the app and coalesce progress callbacks, so the Live Activity can lag until the next callback or app activation. It does not promise continuous second-by-second refresh while suspended. No audio/location workaround or remote push server is used. Force-quitting the app cancels its system-managed transfers; reopening retries interrupted downloads. Resume data is used when the server supports it; otherwise a transfer may restart.
 
-This first version uses **one connection per file**, not segmented range acceleration. It handles regular HTTP files, not arbitrary video-site extraction, blob URLs or DRM streams. The browser hands a GET URL and its applicable cookies to the background session; POST-only exports and some one-time links require the site's own export flow. Deleting an entry deletes its local file. Unknown-size transfers show bytes without an invented percentage.
+This first version uses **one connection per file**, not segmented range acceleration. It handles regular HTTPS files, not arbitrary video-site extraction, blob URLs or DRM streams. The browser hands a GET URL and its applicable cookies to the background session; POST-only exports and some one-time links require the site's own export flow. Deleting an entry deletes its local file. Unknown-size transfers show bytes without an invented percentage.
 
 Cellular preference applies when creating new requests. Existing resume data may retain the previous network policy.
 
-HTTP links are allowed for local devices and older servers, but are unencrypted. Browser download headers and links are stored locally with file protection and cleared from completed entries. No credentials or signing keys are included in this repository.
+Remote file transfers require HTTPS. HTTP browsing remains available inside WebKit; HTTP loopback downloads are permitted for local tools and simulator tests. The native transfer session has no broad ATS exception. Browser download headers and links are stored locally with file protection and cleared from completed entries. No credentials or signing keys are included in this repository.
 
 ## Build and test
 

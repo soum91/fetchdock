@@ -99,12 +99,15 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         var invalid = 0
         for line in lines {
-            if let url = DownloadItem.parseURL(line) { enqueue(url) } else { invalid += 1 }
+            if let url = DownloadItem.parseURL(line), DownloadItem.canDownload(url) { enqueue(url) } else { invalid += 1 }
         }
-        if invalid > 0 { notice = "Skipped \(invalid) invalid link(s). Use one full http:// or https:// download link per line." }
+        if invalid > 0 { notice = "Skipped \(invalid) unsupported link(s). Use one full HTTPS download link per line." }
     }
     func enqueue(_ url: URL, headers: [String: String] = [:]) {
-        guard DownloadItem.parseURL(url.absoluteString) != nil else { return }
+        guard DownloadItem.parseURL(url.absoluteString) != nil, DownloadItem.canDownload(url) else {
+            notice = "Use an HTTPS link for remote file downloads. HTTP pages can still open in Browser."
+            return
+        }
         items.insert(DownloadItem(url: url, filename: DownloadItem.safeName(url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent), headers: headers), at: 0)
         save()
         schedule()
@@ -211,6 +214,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let index = index(for: downloadTask), items[index].status == .running else { return }
         let id = items[index].id
+        items[index].error = nil
         items[index].received = max(0, totalBytesWritten)
         items[index].expected = max(0, totalBytesExpectedToWrite)
         if let sample = samples[id] {

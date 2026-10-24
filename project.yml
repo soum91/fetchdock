@@ -34,7 +34,6 @@ targets:
           - CFBundleURLName: com.soum91.fetchdock
             CFBundleURLSchemes: [fetchdock]
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
           NSAllowsArbitraryLoadsInWebContent: true
     settings:
       base:

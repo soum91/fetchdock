@@ -34,6 +34,11 @@ struct DownloadItem: Codable, Identifiable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return clean.isEmpty || clean == "." || clean == ".." ? "Download" : String(clean.prefix(180))
     }
+    static func canDownload(_ url: URL) -> Bool {
+        if url.scheme?.lowercased() == "https" { return true }
+        // Loopback is useful for local tools and integration tests; other remote files require TLS.
+        return url.scheme?.lowercased() == "http" && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
+    }
     static func parseURL(_ input: String) -> URL? {
         guard let url = URL(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
               let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme),
