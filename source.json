@@ -19,6 +19,15 @@
       "category": "utilities",
       "versions": [
         {
+          "version": "1.1.0.7",
+          "buildVersion": "7",
+          "date": "2026-10-24",
+          "localizedDescription": "Adds Download with FetchDock sharing, Safari Companion and a Gecko/Reynard companion package.",
+          "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-7/FetchDock-1.1.0-build-7.ipa",
+          "size": 502779,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.1.0.6",
           "buildVersion": "6",
           "date": "2026-10-24",
@@ -51,11 +60,11 @@
           "com.apple.security.application-groups"
         ]
       },
-      "version": "1.1.0.6",
+      "version": "1.1.0.7",
       "versionDate": "2026-10-24",
       "versionDescription": "Adds Download with FetchDock sharing, Safari Companion and a Gecko/Reynard companion package.",
-      "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-6/FetchDock-1.1.0-build-6.ipa",
-      "size": 497356
+      "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-7/FetchDock-1.1.0-build-7.ipa",
+      "size": 502779
     }
   ],
   "news": []
