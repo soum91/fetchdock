@@ -4,6 +4,15 @@ import time
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/private-release':
+            if 'user_session=fixture-session' not in self.headers.get('Cookie', ''):
+                self.send_error(404)
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/file')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+            return
         if self.path not in ('/file', '/slow'):
             self.send_error(404)
             return

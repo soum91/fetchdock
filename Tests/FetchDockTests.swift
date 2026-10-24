@@ -1,7 +1,74 @@
 import XCTest
+import WebKit
 @testable import FetchDock
 
 final class FetchDockTests: XCTestCase {
+    @MainActor
+    func testTypedGitHubAssetUsesSavedHTTPOnlySessionBeforeNavigation() async throws {
+        let model = BrowserModel(websiteDataStore: .nonPersistent())
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "github.com", .path: "/", .name: "user_session", .value: "fixture-session",
+            .secure: "TRUE", HTTPCookiePropertyKey("HttpOnly"): "TRUE"
+        ]))
+        await model.webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
+        let captured = expectation(description: "Typed release asset reaches the queue")
+        let link = "https://github.com/soum91/amazonmusictvplus/releases/download/v26.36.1-tv.5/Amazon-Music-TV-26.36.1-tv.5-arm32.apk"
+        model.onDownload = { url, headers in
+            XCTAssertEqual(url.absoluteString, link)
+            XCTAssertTrue(headers["Cookie"]?.contains("user_session=fixture-session") == true)
+            XCTAssertNil(model.webView.url, "Do not load the asset as a webpage first")
+            captured.fulfill()
+        }
+        model.navigate(link)
+        await fulfillment(of: [captured], timeout: 15)
+    }
+    @MainActor
+    func testReleaseDetectionAndCookiesStayWithinTheirScopes() throws {
+        let link = "https://github.com/owner/repo/releases/download/v1/file.apk"
+        let url = try XCTUnwrap(URL(string: link))
+        XCTAssertTrue(BrowserModel.isGitHubReleaseAsset(url))
+        for text in ["https://github.com.evil.example/owner/repo/releases/download/v1/file.apk",
+                     "https://user:pass@github.com/owner/repo/releases/download/v1/file.apk",
+                     "http://github.com/owner/repo/releases/download/v1/file.apk",
+                     "https://github.com/owner/repo/releases/tag/v1",
+                     "https://github.com/owner/repo/releases/download/v1/"] {
+            XCTAssertFalse(BrowserModel.isGitHubReleaseAsset(try XCTUnwrap(URL(string: text))))
+        }
+        func cookie(_ name: String, _ domain: String, _ path: String, secure: Bool = true) throws -> HTTPCookie {
+            var properties: [HTTPCookiePropertyKey: Any] = [.name: name, .value: "fixture", .domain: domain, .path: path]
+            if secure { properties[.secure] = "TRUE" }
+            return try XCTUnwrap(HTTPCookie(properties: properties))
+        }
+        let cookies = try [cookie("session", ".github.com", "/"), cookie("wrongSite", "example.com", "/"),
+                           cookie("wrongPath", "github.com", "/owner/repository"), cookie("rightPath", "github.com", "/owner/repo")]
+        let headers = BrowserModel.downloadHeaders(for: url, cookies: cookies, requestHeaders: ["Cookie": "untrusted", "Authorization": "untrusted"])
+        let header = try XCTUnwrap(headers["Cookie"])
+        XCTAssertTrue(header.contains("session=fixture"))
+        XCTAssertTrue(header.contains("rightPath=fixture"))
+        XCTAssertFalse(header.contains("wrong"))
+        XCTAssertFalse(header.contains("untrusted"))
+        XCTAssertNil(headers["Authorization"])
+        XCTAssertNil(BrowserModel.downloadHeaders(for: URL(string: "https://release-assets.githubusercontent.com/file")!, cookies: cookies)["Cookie"])
+        XCTAssertNil(BrowserModel.downloadHeaders(for: URL(string: "http://github.com/file")!, cookies: cookies)["Cookie"])
+    }
+    @MainActor
+    func testBrowserCookieAuthenticatesTransferAndRedirect() async throws {
+        let manager = makeManager()
+        defer { for item in manager.items { manager.remove(item.id) } }
+        for _ in 0..<100 where manager.restoring { try await Task.sleep(nanoseconds: 100_000_000) }
+        let url = URL(string: "http://127.0.0.1:8765/private-release")!
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [.domain: "127.0.0.1", .path: "/", .name: "user_session", .value: "fixture-session"]))
+        manager.enqueue(url, headers: BrowserModel.downloadHeaders(for: url, cookies: [cookie]))
+        let id = try XCTUnwrap(manager.items.first?.id)
+        for _ in 0..<150 {
+            if let item = manager.items.first(where: { $0.id == id }), [.completed, .failed].contains(item.status) { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let item = try XCTUnwrap(manager.items.first(where: { $0.id == id }))
+        XCTAssertEqual(item.status, .completed, item.error ?? "Authenticated transfer failed")
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(manager.fileURL(item))), Data(repeating: 70, count: 524288))
+        XCTAssertTrue(item.headers.isEmpty, "Discard session headers after completion")
+    }
     @MainActor
     private func makeManager() -> DownloadManager {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

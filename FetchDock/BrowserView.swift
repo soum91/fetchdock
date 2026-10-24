@@ -63,9 +63,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     @Published var canGoForward = false
     @Published var message: String?
     var onDownload: ((URL, [String: String]) -> Void)?
-    override init() {
+    override convenience init() { self.init(websiteDataStore: .default()) }
+    init(websiteDataStore: WKWebsiteDataStore) {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
+        config.websiteDataStore = websiteDataStore
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         webView.navigationDelegate = self
@@ -76,13 +77,42 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     func navigate(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if let url = DownloadItem.parseURL(trimmed) { webView.load(URLRequest(url: url)) }
-        else if !trimmed.contains(" "), trimmed.contains("."), let url = DownloadItem.parseURL("https://" + trimmed) { webView.load(URLRequest(url: url)) }
+        if let url = DownloadItem.parseURL(trimmed) { openFromAddressBar(url) }
+        else if !trimmed.contains(" "), trimmed.contains("."), let url = DownloadItem.parseURL("https://" + trimmed) { openFromAddressBar(url) }
         else {
             var components = URLComponents(string: "https://www.google.com/search")!
             components.queryItems = [URLQueryItem(name: "q", value: trimmed)]
-            if let url = components.url { webView.load(URLRequest(url: url)) }
+            if let url = components.url { openFromAddressBar(url) }
         }
+    }
+    private func openFromAddressBar(_ url: URL) {
+        // A known file endpoint must reach the transfer queue with the original
+        // URL and this browser's cookies, before WebKit tries to render it.
+        if Self.isGitHubReleaseAsset(url) { capture(url); return }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.mainDocumentURL = url
+        webView.load(request)
+    }
+    static func isGitHubReleaseAsset(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.host?.lowercased() == "github.com",
+              url.user == nil, url.password == nil, url.port == nil || url.port == 443 else { return false }
+        let parts = url.path.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.count == 7 && parts[0].isEmpty && !parts[1].isEmpty && !parts[2].isEmpty
+            && parts[3] == "releases" && parts[4] == "download" && !parts[5].isEmpty && !parts[6].isEmpty
+    }
+    static func downloadHeaders(for url: URL, cookies: [HTTPCookie], requestHeaders: [String: String] = [:]) -> [String: String] {
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.isEmpty ? "/" : url.path
+        let applicable = cookies.filter { cookie in
+            let domain = cookie.domain.lowercased()
+            let domainMatches = domain.hasPrefix(".") ? (host == String(domain.dropFirst()) || host.hasSuffix(domain)) : host == domain
+            let cookiePath = cookie.path
+            let pathMatches = path == cookiePath || (path.hasPrefix(cookiePath) && (cookiePath.hasSuffix("/") || path.dropFirst(cookiePath.count).hasPrefix("/")))
+            return domainMatches && pathMatches && (!cookie.isSecure || url.scheme == "https") && (cookie.expiresDate == nil || cookie.expiresDate! > Date())
+        }.sorted { $0.path.count > $1.path.count }
+        var headers = requestHeaders.filter { ["accept", "accept-language", "referer", "user-agent"].contains($0.key.lowercased()) }
+        if !applicable.isEmpty { headers["Cookie"] = HTTPCookie.requestHeaderFields(with: applicable)["Cookie"] }
+        return headers
     }
     func downloadCurrentPage() { if let url = webView.url { capture(url) } }
     private func capture(_ url: URL, requestHeaders: [String: String] = [:]) {
@@ -97,32 +127,27 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         let referrer = webView.url?.absoluteString
         webView.evaluateJavaScript("navigator.userAgent") { userAgent, _ in
             self.webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
-                let host = url.host?.lowercased() ?? ""
-                let path = url.path.isEmpty ? "/" : url.path
-                let applicable = cookies.filter { cookie in
-                    let domain = cookie.domain.lowercased()
-                    let domainMatches = domain.hasPrefix(".") ? (host == String(domain.dropFirst()) || host.hasSuffix(domain)) : host == domain
-                    let cookiePath = cookie.path
-                    let pathMatches = path == cookiePath || (path.hasPrefix(cookiePath) && (cookiePath.hasSuffix("/") || path.dropFirst(cookiePath.count).hasPrefix("/")))
-                    return domainMatches && pathMatches && (!cookie.isSecure || url.scheme == "https") && (cookie.expiresDate == nil || cookie.expiresDate! > Date())
-                }
-                var headers = requestHeaders.filter { ["accept", "accept-language", "referer", "user-agent"].contains($0.key.lowercased()) }
-                if !applicable.isEmpty { headers["Cookie"] = HTTPCookie.requestHeaderFields(with: applicable)["Cookie"] }
+                var headers = Self.downloadHeaders(for: url, cookies: cookies, requestHeaders: requestHeaders)
                 if let referrer { headers["Referer"] = referrer }
                 if let userAgent = userAgent as? String { headers["User-Agent"] = userAgent }
                 self.onDownload?(url, headers)
-                self.message = "Added to Downloads."
+                self.loading = false
+                self.message = "Added to Downloads with this browser's session."
             }
         }
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if navigationAction.shouldPerformDownload {
+        let directRelease = navigationAction.request.httpMethod == "GET" && navigationAction.targetFrame?.isMainFrame != false && Self.isGitHubReleaseAsset(url)
+        if navigationAction.shouldPerformDownload || directRelease {
             capture(url, requestHeaders: navigationAction.request.allHTTPHeaderFields ?? [:]); decisionHandler(.cancel)
         } else if ["http", "https", "about"].contains(url.scheme?.lowercased() ?? "") { decisionHandler(.allow) }
         else { decisionHandler(.cancel); message = "This link uses an unsupported URL scheme. Use a direct file download link." }
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let response = navigationResponse.response as? HTTPURLResponse, !(200...299).contains(response.statusCode) {
+            decisionHandler(.allow); return
+        }
         let attachment = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition")?.lowercased().contains("attachment") == true
         if navigationResponse.isForMainFrame && (!navigationResponse.canShowMIMEType || attachment), let url = navigationResponse.response.url {
             capture(url); decisionHandler(.cancel); loading = false
