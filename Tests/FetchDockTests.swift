@@ -4,52 +4,64 @@ import WebKit
 
 final class FetchDockTests: XCTestCase {
     @MainActor
-    func testTypedGitHubAssetUsesSavedHTTPOnlySessionBeforeNavigation() async throws {
+    func testTypedExtensionlessDownloadUsesSavedHTTPOnlySession() async throws {
         let model = BrowserModel(websiteDataStore: .nonPersistent())
         let cookie = try XCTUnwrap(HTTPCookie(properties: [
-            .domain: "github.com", .path: "/", .name: "user_session", .value: "fixture-session",
-            .secure: "TRUE", HTTPCookiePropertyKey("HttpOnly"): "TRUE"
+            .domain: "127.0.0.1", .path: "/", .name: "user_session", .value: "fixture-session",
+            HTTPCookiePropertyKey("HttpOnly"): "TRUE"
         ]))
         await model.webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
-        let captured = expectation(description: "Typed release asset reaches the queue")
-        let link = "https://github.com/soum91/amazonmusictvplus/releases/download/v26.36.1-tv.5/Amazon-Music-TV-26.36.1-tv.5-arm32.apk"
+        let captured = expectation(description: "Authenticated redirect reaches the queue")
         model.onDownload = { url, headers in
-            XCTAssertEqual(url.absoluteString, link)
+            XCTAssertEqual(url.path, "/file")
             XCTAssertTrue(headers["Cookie"]?.contains("user_session=fixture-session") == true)
-            XCTAssertNil(model.webView.url, "Do not load the asset as a webpage first")
             captured.fulfill()
         }
-        model.navigate(link)
-        await fulfillment(of: [captured], timeout: 15)
+        // No host rule and no filename extension: the response identifies a file.
+        model.navigate("http://127.0.0.1:8765/private-release")
+        await fulfillment(of: [captured], timeout: 20)
     }
     @MainActor
-    func testReleaseDetectionAndCookiesStayWithinTheirScopes() throws {
-        let link = "https://github.com/owner/repo/releases/download/v1/file.apk"
-        let url = try XCTUnwrap(URL(string: link))
-        XCTAssertTrue(BrowserModel.isGitHubReleaseAsset(url))
-        for text in ["https://github.com.evil.example/owner/repo/releases/download/v1/file.apk",
-                     "https://user:pass@github.com/owner/repo/releases/download/v1/file.apk",
-                     "http://github.com/owner/repo/releases/download/v1/file.apk",
-                     "https://github.com/owner/repo/releases/tag/v1",
-                     "https://github.com/owner/repo/releases/download/v1/"] {
-            XCTAssertFalse(BrowserModel.isGitHubReleaseAsset(try XCTUnwrap(URL(string: text))))
+    func testBrowserRedirectDoesNotLeakCookieToAnotherHost() async throws {
+        let model = BrowserModel(websiteDataStore: .nonPersistent())
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "127.0.0.1", .path: "/", .name: "user_session", .value: "fixture-session"
+        ]))
+        await model.webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
+        let captured = expectation(description: "Cross-host redirect keeps cookies scoped")
+        model.onDownload = { url, headers in
+            XCTAssertEqual(url.host, "localhost")
+            XCTAssertEqual(url.path, "/no-cookies")
+            XCTAssertNil(headers["Cookie"])
+            captured.fulfill()
         }
-        func cookie(_ name: String, _ domain: String, _ path: String, secure: Bool = true) throws -> HTTPCookie {
+        // The destination returns 403 if the source's Cookie header is forwarded.
+        model.navigate("http://127.0.0.1:8765/redirect-other-host")
+        await fulfillment(of: [captured], timeout: 20)
+    }
+    @MainActor
+    func testSessionCookiesStayWithinTheirScopes() throws {
+        let url = URL(string: "https://files.example.com/account/download")!
+        func cookie(_ name: String, _ domain: String, _ path: String, secure: Bool = true, expires: Date? = nil) throws -> HTTPCookie {
             var properties: [HTTPCookiePropertyKey: Any] = [.name: name, .value: "fixture", .domain: domain, .path: path]
             if secure { properties[.secure] = "TRUE" }
+            if let expires { properties[.expires] = expires }
             return try XCTUnwrap(HTTPCookie(properties: properties))
         }
-        let cookies = try [cookie("session", ".github.com", "/"), cookie("wrongSite", "example.com", "/"),
-                           cookie("wrongPath", "github.com", "/owner/repository"), cookie("rightPath", "github.com", "/owner/repo")]
-        let headers = BrowserModel.downloadHeaders(for: url, cookies: cookies, requestHeaders: ["Cookie": "untrusted", "Authorization": "untrusted"])
+        let cookies = try [cookie("session", ".example.com", "/"), cookie("wrongSite", "another.example", "/"),
+                           cookie("wrongPath", "files.example.com", "/accounts"), cookie("rightPath", "files.example.com", "/account"),
+                           cookie("expired", "files.example.com", "/", expires: Date(timeIntervalSinceNow: -3600))]
+        let headers = BrowserModel.sessionHeaders(for: url, cookies: cookies, requestHeaders: ["Cookie": "untrusted", "Authorization": "untrusted"])
         let header = try XCTUnwrap(headers["Cookie"])
         XCTAssertTrue(header.contains("session=fixture"))
         XCTAssertTrue(header.contains("rightPath=fixture"))
         XCTAssertFalse(header.contains("wrong"))
+        XCTAssertFalse(header.contains("expired"))
         XCTAssertFalse(header.contains("untrusted"))
         XCTAssertNil(headers["Authorization"])
-        XCTAssertNil(BrowserModel.downloadHeaders(for: URL(string: "https://release-assets.githubusercontent.com/file")!, cookies: cookies)["Cookie"])
-        XCTAssertNil(BrowserModel.downloadHeaders(for: URL(string: "http://github.com/file")!, cookies: cookies)["Cookie"])
+        for link in ["https://cdn.other.example/file", "https://files.example.com.evil.test/file", "http://files.example.com/file"] {
+            XCTAssertNil(BrowserModel.sessionHeaders(for: URL(string: link)!, cookies: cookies)["Cookie"])
+        }
     }
     @MainActor
     func testBrowserCookieAuthenticatesTransferAndRedirect() async throws {
@@ -58,7 +70,7 @@ final class FetchDockTests: XCTestCase {
         for _ in 0..<100 where manager.restoring { try await Task.sleep(nanoseconds: 100_000_000) }
         let url = URL(string: "http://127.0.0.1:8765/private-release")!
         let cookie = try XCTUnwrap(HTTPCookie(properties: [.domain: "127.0.0.1", .path: "/", .name: "user_session", .value: "fixture-session"]))
-        manager.enqueue(url, headers: BrowserModel.downloadHeaders(for: url, cookies: [cookie]))
+        manager.enqueue(url, headers: BrowserModel.sessionHeaders(for: url, cookies: [cookie]))
         let id = try XCTUnwrap(manager.items.first?.id)
         for _ in 0..<150 {
             if let item = manager.items.first(where: { $0.id == id }), [.completed, .failed].contains(item.status) { break }

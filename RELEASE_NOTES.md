@@ -1,9 +1,10 @@
-FetchDock 1.1: authenticated GitHub release links.
+FetchDock 1.1: browser session handling across websites.
 
-- Typed and tapped GitHub release asset links enter the download queue directly with matching cookies from FetchDock's browser, including HTTP-only login cookies.
-- Address-bar webpage loads set the main document context and bypass stale local responses.
-- HTTP error pages remain visible in the browser rather than being mistaken for file attachments.
-- Regression coverage for saved browser session handoff, cookie scope, and an authenticated download redirect. Private GitHub account behavior still needs device verification.
+- Address-bar navigation and Reload read the browser's current cookies, including HTTP-only session cookies, and attach only cookies valid for the destination.
+- Shared cookie handling for webpage requests and file transfers, with no GitHub-specific URL interception.
+- File detection uses the server response, supporting extensionless download links and redirects.
+- HTTP error pages stay visible in the browser rather than being saved as file attachments.
+- Regression coverage for authenticated extensionless links, cross-host redirect isolation, cookie scope/expiry, and native download integrity. Real account sessions still need device verification.
 
 - Download with FetchDock in the iOS share sheet, using system background transfers
 - Safari Companion: file-link discovery and optional capture on chosen websites
