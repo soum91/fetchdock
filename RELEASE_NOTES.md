@@ -1,7 +1,7 @@
 FetchDock 1.1: browser session handling across websites.
 
-- Address-bar navigation and Reload read the browser's current cookies, including HTTP-only session cookies, and attach only cookies valid for the destination.
-- Shared cookie handling for webpage requests and file transfers, with no GitHub-specific URL interception.
+- Address-bar navigation and Reload establish the destination's first-party context. WebKit uses its persistent cookie store for each request and redirect, including HTTP-only login cookies.
+- Native file transfers read matching cookies from that same browser store, with no GitHub-specific URL interception.
 - File detection uses the server response, supporting extensionless download links and redirects.
 - HTTP error pages stay visible in the browser rather than being saved as file attachments.
 - Regression coverage for authenticated extensionless links, cross-host redirect isolation, cookie scope/expiry, and native download integrity. Real account sessions still need device verification.

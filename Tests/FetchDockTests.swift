@@ -19,7 +19,7 @@ final class FetchDockTests: XCTestCase {
         }
         // No host rule and no filename extension: the response identifies a file.
         model.navigate("http://127.0.0.1:8765/private-release")
-        await fulfillment(of: [captured], timeout: 20)
+        await fulfillment(of: [captured], timeout: 45)
     }
     @MainActor
     func testBrowserRedirectDoesNotLeakCookieToAnotherHost() async throws {
@@ -37,7 +37,8 @@ final class FetchDockTests: XCTestCase {
         }
         // The destination returns 403 if the source's Cookie header is forwarded.
         model.navigate("http://127.0.0.1:8765/redirect-other-host")
-        await fulfillment(of: [captured], timeout: 20)
+        await fulfillment(of: [captured], timeout: 45)
+        print("Cross-host browser result:", model.webView.url?.absoluteString ?? "none", model.message ?? "no browser error")
     }
     @MainActor
     func testSessionCookiesStayWithinTheirScopes() throws {

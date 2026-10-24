@@ -63,7 +63,6 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     @Published var canGoForward = false
     @Published var message: String?
     var onDownload: ((URL, [String: String]) -> Void)?
-    private var addressLoadID = UUID()
     override convenience init() { self.init(websiteDataStore: .default()) }
     init(websiteDataStore: WKWebsiteDataStore) {
         let config = WKWebViewConfiguration()
@@ -87,19 +86,16 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         }
     }
     private func openFromAddressBar(_ url: URL) {
-        // Address-bar navigations have no originating webpage. Build their
-        // first-party context and scoped cookies explicitly for EVERY site.
-        let loadID = UUID()
-        addressLoadID = loadID
+        // Address-bar navigations have no originating webpage. Supply their
+        // first-party context, but let WebKit attach cookies at EVERY hop.
+        // A manually injected Cookie header can outlive its original host on
+        // redirects. It must never be put on a browser navigation request.
         loading = true
         webView.stopLoading()
-        webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-            guard let self, self.addressLoadID == loadID else { return }
-            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
-            request.mainDocumentURL = url
-            request.allHTTPHeaderFields = Self.sessionHeaders(for: url, cookies: cookies)
-            self.webView.load(request)
-        }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.mainDocumentURL = url
+        request.httpShouldHandleCookies = true
+        webView.load(request)
     }
     func reload() {
         if let url = webView.url { openFromAddressBar(url) }
