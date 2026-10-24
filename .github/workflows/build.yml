@@ -19,12 +19,16 @@ jobs:
           fetch-depth: 0
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Validate and package browser add-ons
+        run: |
+          node --test ExtensionTests/*.test.cjs
+          python3 scripts/package_extensions.py
       - name: Generate project
         run: xcodegen generate
       - name: Check whether app sources changed
         id: changes
         run: |
-          CHANGED_APP=$(git diff --name-only HEAD^ HEAD -- FetchDock Shared FetchDockActivity Tests project.yml | wc -l)
+          CHANGED_APP=$(git diff --name-only HEAD^ HEAD -- FetchDock Shared FetchDockActivity FetchDockShare FetchDockSafari Tests project.yml | wc -l)
           if [ "$CHANGED_APP" -gt 0 ]; then echo "test=true" >> "$GITHUB_OUTPUT"; else echo "test=false" >> "$GITHUB_OUTPUT"; fi
       - name: Test downloads on iOS Simulator
         if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.test == 'true'
@@ -44,15 +48,20 @@ jobs:
           mkdir -p build/Payload
           cp -R build/FetchDock.xcarchive/Products/Applications/FetchDock.app build/Payload/
           APP=build/Payload/FetchDock.app
-          ACTIVITY="$APP/PlugIns/FetchDockActivity.appex"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0.${BUILD_NUMBER}" "$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0.${BUILD_NUMBER}" "$ACTIVITY/Info.plist"
-          codesign --force --sign - --timestamp=none "$ACTIVITY"
-          codesign --force --sign - --timestamp=none "$APP"
+          for EXTENSION in "$APP"/PlugIns/*.appex; do
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.0.${BUILD_NUMBER}" "$EXTENSION/Info.plist"
+            if [[ "$EXTENSION" == *FetchDockShare.appex ]]; then
+              codesign --force --sign - --timestamp=none --entitlements FetchDockShare/FetchDockShare.entitlements "$EXTENSION"
+            else
+              codesign --force --sign - --timestamp=none "$EXTENSION"
+            fi
+          done
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.0.${BUILD_NUMBER}" "$APP/Info.plist"
+          codesign --force --sign - --timestamp=none --entitlements FetchDock/FetchDock.entitlements "$APP"
           codesign --verify --deep --strict "$APP"
-          python3 -c 'import os,plistlib,pathlib; base=pathlib.Path("build/Payload/FetchDock.app"); paths=[(base,"com.soum91.fetchdock"),(base/"PlugIns/FetchDockActivity.appex","com.soum91.fetchdock.activity")]; expected="1.0.0."+os.environ["BUILD_NUMBER"]; [(lambda p,b: (print(p,b), None) if p["CFBundleIdentifier"]==b and p["CFBundleShortVersionString"]==expected and p["CFBundleVersion"]==os.environ["BUILD_NUMBER"] else (_ for _ in ()).throw(AssertionError("Bundle identity/version mismatch")))(plistlib.loads((path/"Info.plist").read_bytes()),bundle) for path,bundle in paths]'
+          python3 scripts/verify_package.py "$APP" "$BUILD_NUMBER"
           cd build
-          /usr/bin/zip -qry "FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" Payload
+          /usr/bin/zip -qry "FetchDock-1.1.0-build-${BUILD_NUMBER}.ipa" Payload
           cd ..
       - uses: actions/upload-artifact@v4
         if: always()
@@ -60,6 +69,7 @@ jobs:
           name: FetchDock-build-${{ github.run_number }}
           path: |
             build/*.ipa
+            build/*.xpi
             build/TestResults.xcresult
           if-no-files-found: ignore
       - name: Publish GitHub release
@@ -67,7 +77,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          gh release create "build-${BUILD_NUMBER}" "build/FetchDock-1.0.0-build-${BUILD_NUMBER}.ipa" --target "$GITHUB_SHA" --title "FetchDock 1.0.0 (build ${BUILD_NUMBER})" --notes-file RELEASE_NOTES.md --latest
+          gh release create "build-${BUILD_NUMBER}" "build/FetchDock-1.1.0-build-${BUILD_NUMBER}.ipa" "build/FetchDock-Reynard.xpi" --target "$GITHUB_SHA" --title "FetchDock 1.1.0 (build ${BUILD_NUMBER})" --notes-file RELEASE_NOTES.md --latest
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git pull --rebase origin main

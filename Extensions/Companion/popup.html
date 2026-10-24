@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="popup.css"></head>
+<body><header><img src="icon.png" width="34" height="34" alt=""><div><h1>FetchDock</h1><small>Your downloads, in motion</small></div></header>
+<p id="status" role="status">Looking for file links…</p>
+<label id="capture"><input id="captureToggle" type="checkbox"> Catch file links on this site</label>
+<p class="help">When enabled, file links show a “Download with FetchDock” choice on the page.</p>
+<div id="files"></div><a id="page" class="secondary" hidden>Download current URL</a>
+<p class="help">Uses HTTPS file links. Login cookies, blob links and protected streams aren't transferred. FetchDock must be installed on this device.</p>
+<script src="core.js"></script><script src="popup.js"></script></body></html>

@@ -55,11 +55,20 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                 items = try JSONDecoder().decode([DownloadItem].self, from: Data(contentsOf: root.appendingPathComponent("downloads.json")))
             }
         } catch { notice = "Could not restore downloads: \(error.localizedDescription)" }
+        if configurationOverride == nil {
+            SharedTransferCoordinator.shared.onChange = { [weak self] in self?.importSharedTransfers() }
+        }
         reconcile()
     }
 
     func connect() { _ = session }
     func reconcile() {
+        if configurationOverride == nil {
+            importSharedTransfers()
+            for record in SharedTransferCoordinator.shared.records() where record.status == .running {
+                SharedTransferCoordinator.shared.adopt(record.sessionID)
+            }
+        }
         guard !reconciling else { return }
         reconciling = true
         session.getAllTasks { allTasks in
@@ -82,7 +91,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                     self.items[index].expected = max(0, download.countOfBytesExpectedToReceive)
                     if download.state == .suspended { download.resume() }
                 }
-                for index in self.items.indices where self.tasks[self.items[index].id] == nil {
+                for index in self.items.indices where self.tasks[self.items[index].id] == nil && self.items[index].sharedSessionID == nil {
                     if self.items[index].status == .running { self.items[index].status = .queued }
                     if self.items[index].status == .pausing { self.items[index].status = .paused }
                 }
@@ -115,7 +124,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     func schedule() {
         guard !restoring else { return }
-        var slots = maxConcurrent - tasks.count
+        var slots = maxConcurrent - tasks.count - items.filter { $0.sharedSessionID != nil && $0.status == .running }.count
         for index in items.indices.reversed() where slots > 0 && items[index].status == .queued {
             let item = items[index]
             let task: URLSessionDownloadTask
@@ -141,6 +150,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     func pause(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        if items[index].sharedSessionID != nil { SharedTransferCoordinator.shared.pause(id); return }
         guard let task = tasks[id] else {
             if items[index].status == .queued { items[index].status = .paused; save(); live.refresh(items, force: true) }
             return
@@ -164,6 +174,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     func resume(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }), [.paused, .failed].contains(items[index].status) else { return }
+        if items[index].sharedSessionID != nil { SharedTransferCoordinator.shared.resume(id); return }
         items[index].status = .queued
         items[index].error = nil
         schedule()
@@ -173,6 +184,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     func pauseAll() { for item in items where [.running, .queued].contains(item.status) { pause(item.id) } }
     func resumeAll() { for item in items where [.paused, .failed].contains(item.status) { resume(item.id) } }
     func remove(_ id: UUID) {
+        if items.first(where: { $0.id == id })?.sharedSessionID != nil { SharedTransferCoordinator.shared.remove(id) }
         tasks.removeValue(forKey: id)?.cancel()
         if let item = items.first(where: { $0.id == id }), let file = fileURL(item) { try? FileManager.default.removeItem(at: file) }
         items.removeAll { $0.id == id }
@@ -186,14 +198,57 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         guard let path = item.relativePath else { return nil }
         return downloads.appendingPathComponent((path as NSString).lastPathComponent)
     }
-    func save() {
+    @discardableResult
+    func save() -> Bool {
         do {
             let data = try JSONEncoder().encode(items)
             try data.write(to: root.appendingPathComponent("downloads.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             lastSave = Date()
-        } catch { notice = "Could not save the queue: \(error.localizedDescription)" }
+            return true
+        } catch { notice = "Could not save the queue: \(error.localizedDescription)"; return false }
     }
-    func settingsChanged() { schedule(); live.refresh(items, force: true) }
+    func settingsChanged() {
+        UserDefaults(suiteName: ShareStore.groupID)?.set(allowsCellular, forKey: "allowsCellular")
+        schedule(); live.refresh(items, force: true)
+    }
+    func importSharedTransfers() {
+        let coordinator = SharedTransferCoordinator.shared
+        guard let sharedStore = try? coordinator.store() else { return }
+        var finished: [UUID] = []
+        let records = coordinator.records().sorted { $0.createdAt < $1.createdAt }
+        guard !records.isEmpty else { return }
+        for record in records {
+            if !items.contains(where: { $0.id == record.id }) {
+                var item = DownloadItem(url: record.url, filename: record.filename)
+                item.id = record.id; item.createdAt = record.createdAt; item.sharedSessionID = record.sessionID
+                items.insert(item, at: 0)
+            }
+            guard let index = items.firstIndex(where: { $0.id == record.id }) else { continue }
+            if items[index].status == .completed, let existing = fileURL(items[index]), FileManager.default.fileExists(atPath: existing.path) {
+                finished.append(record.id); continue
+            }
+            items[index].sharedSessionID = record.sessionID
+            items[index].status = record.status; items[index].filename = record.filename
+            items[index].received = record.received; items[index].expected = record.expected
+            items[index].speed = record.speed; items[index].error = record.error
+            if record.status == .completed, let file = record.file {
+                let name = record.id.uuidString + "-" + DownloadItem.safeName(record.filename)
+                let destination = downloads.appendingPathComponent(name)
+                do {
+                    if !FileManager.default.fileExists(atPath: destination.path) {
+                        try FileManager.default.copyItem(at: sharedStore.fileURL(file), to: destination)
+                    }
+                    items[index].relativePath = name; items[index].sharedSessionID = nil
+                    finished.append(record.id)
+                } catch {
+                    items[index].status = .failed; items[index].error = "Could not import shared file: \(error.localizedDescription)"
+                }
+            }
+        }
+        // Acknowledge only after the normal queue has durably recorded the imported file.
+        if save() { finished.forEach { coordinator.forgetCompleted($0) } }
+        schedule(); live.refresh(items, force: true)
+    }
     private func resumeURL(_ id: UUID) -> URL { root.appendingPathComponent(id.uuidString + ".resume") }
     private func persistResume(_ data: Data, id: UUID) {
         do { try data.write(to: resumeURL(id), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }

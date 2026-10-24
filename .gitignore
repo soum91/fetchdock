@@ -7,3 +7,6 @@ DerivedData/
 FetchDock/Info.plist
 FetchDockActivity/Info.plist
 __pycache__/
+FetchDockShare/Info.plist
+FetchDockSafari/Info.plist
+FetchDockSafari/Resources/

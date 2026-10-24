@@ -6,7 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: '5.0'
-    MARKETING_VERSION: '1.0.0'
+    MARKETING_VERSION: '1.1.0'
     CURRENT_PROJECT_VERSION: '1'
     TARGETED_DEVICE_FAMILY: '1,2'
     CODE_SIGNING_ALLOWED: NO
@@ -18,6 +18,8 @@ targets:
     sources: [FetchDock, Shared]
     dependencies:
       - target: FetchDockActivity
+      - target: FetchDockShare
+      - target: FetchDockSafari
     info:
       path: FetchDock/Info.plist
       properties:
@@ -39,6 +41,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: FetchDock/FetchDock.entitlements
   FetchDockActivity:
     type: app-extension
     platform: iOS
@@ -54,6 +57,50 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.activity
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  FetchDockShare:
+    type: app-extension
+    platform: iOS
+    sources: [FetchDockShare, Shared]
+    info:
+      path: FetchDockShare/Info.plist
+      properties:
+        CFBundleDisplayName: Download with FetchDock
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 20
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.share
+        CODE_SIGN_ENTITLEMENTS: FetchDockShare/FetchDockShare.entitlements
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  FetchDockSafari:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: FetchDockSafari/SafariWebExtensionHandler.swift
+      - path: FetchDockSafari/Resources
+        buildPhase: resources
+    info:
+      path: FetchDockSafari/Info.plist
+      properties:
+        CFBundleDisplayName: FetchDock Companion
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.safari
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
   FetchDockTests:

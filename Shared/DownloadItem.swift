@@ -14,6 +14,7 @@ struct DownloadItem: Codable, Identifiable {
     var received: Int64 = 0
     var expected: Int64 = 0
     var relativePath: String?
+    var sharedSessionID: String?
     var error: String?
     var headers: [String: String] = [:]
     // Ephemeral values deliberately excluded from persistence.
@@ -27,7 +28,7 @@ struct DownloadItem: Codable, Identifiable {
         return value >= 3600 ? "\(value / 3600)h \(value % 3600 / 60)m left" : value >= 60 ? "\(value / 60)m \(value % 60)s left" : "\(value)s left"
     }
     enum CodingKeys: String, CodingKey {
-        case id, url, filename, createdAt, status, received, expected, relativePath, error, headers
+        case id, url, filename, createdAt, status, received, expected, relativePath, sharedSessionID, error, headers
     }
     static func safeName(_ proposed: String) -> String {
         let clean = proposed.components(separatedBy: CharacterSet(charactersIn: "/\\:\n\r\0")).joined(separator: "_")

@@ -1,11 +1,10 @@
-FetchDock's first native iOS build.
+FetchDock 1.1 adds sharing and browser companions.
 
-- Persistent download queue, pause/resume and retry
-- Background file transfers, speed and remaining time
-- Lock Screen and Dynamic Island Live Activity
-- Built-in browser with file download detection
-- Files access, preview and sharing
+- Download with FetchDock in the iOS share sheet, using system background transfers
+- Safari Companion: file-link discovery and optional capture on chosen websites
+- Gecko/Reynard companion developer package, with bundled fork integration
+- Existing queues, pause/resume, Files sharing and Live Activities
 
-Requires iOS 18+. This IPA must be signed with your sideloading tool. Keep the activity extension enabled. Reuse the same signing identity and bundle ID for updates.
+Requires iOS 18+. Keep Activity, Share and Safari extensions enabled when signing. The app and Share extension need compatible App Group signing. Open FetchDock to start the Live Activity after a share. iOS controls background refresh frequency.
 
-iOS controls progress refreshes while the app is suspended. Server support determines whether a paused download resumes or restarts. This release uses one connection per file.
+Remote transfers use HTTPS. Browser cookies aren't exported by external companions. This release uses one connection per file.

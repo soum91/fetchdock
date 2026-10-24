@@ -39,3 +39,15 @@ xcodebuild test -project FetchDock.xcodeproj -scheme FetchDock -destination 'pla
 ```
 
 The test suite validates URL handling, filename sanitization, queue serialization, real HTTP file integrity, HTTP failures, and pause/relaunch-reconciliation/resume behavior using the local server. Integration tests inject a regular delegate URLSession and isolated temporary storage because the hosted simulator cannot reliably connect to nsurlsessiond. Production initialization always uses a background session. Device testing remains necessary for system-managed background transfer scheduling, actual Lock Screen refreshes and sideload signing.
+
+## Share sheet and browser companions (1.1)
+
+Keep **all three extensions** (Activity, Share, Safari) when signing. The app and Share extension must retain the same `group.com.soum91.fetchdock` App Group entitlement. FetchDock Settings reports whether shared storage is available. Existing app and Activity bundle identifiers stay unchanged for upgrades.
+
+- **Share sheet:** long-press a file link in Safari/Chrome/Reynard, Share, then **Download with FetchDock**. Choose Download in the sheet. Transfers start through the system background service without an unsupported attempt to launch the parent app. Open FetchDock to see progress and start its Live Activity. Normal webpage URLs save HTML, not a file hidden behind the page.
+- **Safari:** Settings > Apps > Safari > Extensions > FetchDock Companion. Enable it and allow it on your chosen websites. Open its menu to see detected file/media links or send the current URL. Enable **Catch file links on this site** to show a FetchDock choice when clicking ordinary file links. This is off by default and stored per origin.
+- **Reynard:** `FetchDock-Reynard.xpi` is built from the same companion source. The fork's bundled integration is used because its normal add-on installer requires Mozilla-signed packages; the release XPI is an unsigned developer package, not a claim that AMO signing has been completed.
+
+The companions send only the file URL through `fetchdock://download?url=...`. They do not export browser cookies or history. Login-only downloads may need FetchDock's built-in browser. Blob URLs, DRM streams, POST-only exports and arbitrary JavaScript download buttons aren't intercepted. This integration runs on the same iPhone/iPad; it does not transfer a TV browser's downloads to a phone.
+
+Run `node --test ExtensionTests/*.test.cjs` for companion URL policy tests and `python3 scripts/package_extensions.py` to regenerate Safari resources and the Reynard XPI before running XcodeGen.

@@ -246,6 +246,13 @@ struct SettingsView: View {
                     Text("Shows the current file, progress and speed. iOS controls updates while FetchDock is suspended, so the display may temporarily show older progress. Tap it to return to Downloads.").font(.caption).foregroundStyle(.secondary)
                     Button("Open iOS Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
                 }
+                Section("Browser integration") {
+                    Label("Safari Companion extension included", systemImage: "safari")
+                    Text("Enable FetchDock Companion in iOS Settings > Apps > Safari > Extensions. Allow it on the sites you want to use. Its menu lists file links and can catch download links on sites you enable.").font(.caption).foregroundStyle(.secondary)
+                    Label("Download with FetchDock share extension", systemImage: "square.and.arrow.up")
+                    Text("In Safari, Chrome or Reynard, share a file link and choose Download with FetchDock. Shared downloads need compatible App Group signing. Open FetchDock to start its Live Activity.").font(.caption).foregroundStyle(.secondary)
+                    LabeledContent("Shared storage", value: (try? ShareStore.appGroup()) != nil ? "Available" : "Check signing")
+                }
                 Section("Files & privacy") {
                     Text("Downloads are saved on this iPhone under Files > On My iPhone > FetchDock > Downloads. Long-press a completed file to share it or save it elsewhere.")
                     Text("Links and browser download cookies stay on this device. No FetchDock account, analytics or server. Remote file downloads require HTTPS; the browser can still open HTTP pages.")
@@ -257,6 +264,7 @@ struct SettingsView: View {
             }.navigationTitle("Settings")
                 .onChange(of: liveActivities) { _ in manager.settingsChanged() }
                 .onChange(of: concurrent) { _ in manager.settingsChanged() }
+                .onChange(of: cellular) { _ in manager.settingsChanged() }
         }
     }
 }
