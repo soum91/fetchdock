@@ -63,6 +63,13 @@ struct ContentView: View {
             BrowserView().tabItem { Label("Browser", systemImage: "globe") }.tag(1)
             SettingsView().tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(2)
         }
+        .onOpenURL { url in
+            guard url.scheme == "fetchdock" else { return }
+            selectedTab = 0
+            if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value {
+                manager.addLinks(value)
+            }
+        }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $adding) { AddDownloadView() }
         .sheet(item: $preview) { file in FilePreview(url: file.url).ignoresSafeArea() }

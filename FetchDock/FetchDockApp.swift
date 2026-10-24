@@ -18,12 +18,6 @@ struct FetchDockApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView().environmentObject(manager).tint(.mint)
-                .onOpenURL { url in
-                    guard url.scheme == "fetchdock" else { return }
-                    if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value {
-                        manager.addLinks(value)
-                    }
-                }
                 .onChange(of: scenePhase) { phase in
                     if phase == .active { manager.reconcile() }
                     else { manager.save() }

@@ -191,7 +191,12 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     private func removeResume(_ id: UUID) { try? FileManager.default.removeItem(at: resumeURL(id)) }
     private func index(for task: URLSessionTask) -> Int? {
-        guard let id = UUID(uuidString: task.taskDescription ?? ""), tasks[id]?.taskIdentifier == task.taskIdentifier else { return nil }
+        guard let id = UUID(uuidString: task.taskDescription ?? "") else { return nil }
+        // Background delegates may arrive before getAllTasks finishes on a cold launch.
+        if tasks[id] == nil, restoring || reconciling, let download = task as? URLSessionDownloadTask {
+            tasks[id] = download
+        }
+        guard tasks[id]?.taskIdentifier == task.taskIdentifier else { return nil }
         return items.firstIndex { $0.id == id }
     }
 
@@ -220,6 +225,9 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         if let response = downloadTask.response as? HTTPURLResponse, !(200...299).contains(response.statusCode) {
             items[index].status = .failed
             items[index].error = "Server returned HTTP \(response.statusCode). Check the link or sign in using Browser."
+            removeResume(id)
+            items[index].received = 0
+            items[index].expected = 0
             return
         }
         do {
@@ -275,6 +283,10 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         live.refresh(items, force: true)
         let done = backgroundCompletion
         backgroundCompletion = nil
-        done?()
+        // Keep the system's background execution grant until ActivityKit has accepted the update.
+        Task { @MainActor in
+            await live.finishPendingUpdates()
+            done?()
+        }
     }
 }

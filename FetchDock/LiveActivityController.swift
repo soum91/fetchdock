@@ -5,8 +5,11 @@ import UIKit
 final class LiveActivityController {
     private var activity: Activity<DownloadActivityAttributes>?
     private var lastUpdate = Date.distantPast
+    private var pendingUpdate: Task<Void, Never>?
     var error: String?
     var enabled: Bool { UserDefaults.standard.object(forKey: "liveActivities") as? Bool ?? true }
+
+    func finishPendingUpdates() async { await pendingUpdate?.value }
 
     func refresh(_ items: [DownloadItem], force: Bool = false) {
         let active = items.filter { [.running, .queued, .pausing, .paused].contains($0.status) }
@@ -18,7 +21,7 @@ final class LiveActivityController {
         guard enabled, !active.isEmpty else {
             if let old = activity {
                 activity = nil
-                Task { await old.end(nil, dismissalPolicy: .immediate) }
+                pendingUpdate = Task { await old.end(nil, dismissalPolicy: .immediate) }
             }
             return
         }
@@ -40,7 +43,7 @@ final class LiveActivityController {
             } catch { self.error = error.localizedDescription }
         } else if force || Date().timeIntervalSince(lastUpdate) >= 2 {
             lastUpdate = Date()
-            if let current = activity { Task { await current.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(20))) } }
+            if let current = activity { pendingUpdate = Task { await current.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(20))) } }
         }
     }
 }
