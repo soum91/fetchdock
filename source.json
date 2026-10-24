@@ -19,6 +19,15 @@
       "category": "utilities",
       "versions": [
         {
+          "version": "1.0.0.5",
+          "buildVersion": "5",
+          "date": "2026-10-24",
+          "localizedDescription": "Native iOS downloads, queue, pause/resume, browser and Live Activities.",
+          "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-5/FetchDock-1.0.0-build-5.ipa",
+          "size": 338006,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.0.0.4",
           "buildVersion": "4",
           "date": "2026-10-24",
@@ -31,11 +40,11 @@
       "appPermissions": {
         "entitlements": []
       },
-      "version": "1.0.0.4",
+      "version": "1.0.0.5",
       "versionDate": "2026-10-24",
       "versionDescription": "Native iOS downloads, queue, pause/resume, browser and Live Activities.",
-      "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-4/FetchDock-1.0.0-build-4.ipa",
-      "size": 337045
+      "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-5/FetchDock-1.0.0-build-5.ipa",
+      "size": 338006
     }
   ],
   "news": []
