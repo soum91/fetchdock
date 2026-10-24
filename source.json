@@ -17,8 +17,25 @@
       "iconURL": "https://raw.githubusercontent.com/soum91/fetchdock/main/FetchDock/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
       "tintColor": "#64F4CB",
       "category": "utilities",
-      "versions": [],
-      "appPermissions": { "entitlements": [] }
+      "versions": [
+        {
+          "version": "1.0.0.4",
+          "buildVersion": "4",
+          "date": "2026-10-24",
+          "localizedDescription": "Native iOS downloads, queue, pause/resume, browser and Live Activities.",
+          "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-4/FetchDock-1.0.0-build-4.ipa",
+          "size": 337045,
+          "minOSVersion": "18.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": []
+      },
+      "version": "1.0.0.4",
+      "versionDate": "2026-10-24",
+      "versionDescription": "Native iOS downloads, queue, pause/resume, browser and Live Activities.",
+      "downloadURL": "https://github.com/soum91/fetchdock/releases/download/build-4/FetchDock-1.0.0-build-4.ipa",
+      "size": 337045
     }
   ],
   "news": []
