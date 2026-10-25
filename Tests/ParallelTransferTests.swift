@@ -14,6 +14,17 @@ final class ParallelTransferTests: XCTestCase {
         for index in 1..<parts.count { XCTAssertEqual(parts[index].first, parts[index - 1].last + 1) }
         XCTAssertEqual(parts.reduce(Int64(0)) { $0 + ($1.last - $1.first + 1) }, Int64.max)
     }
+    func testReconstructedCookiesRemainHostOnlyAndSecure() throws {
+        let url = URL(string: "https://files.example.com/protected/download")!
+        let cookies = FetchDockTransferEngine.scopedCookies("session=fixture==; __Host-login=fixture", for: url)
+        XCTAssertEqual(cookies.count, 2)
+        let storage = try XCTUnwrap(URLSessionConfiguration.ephemeral.httpCookieStorage)
+        cookies.forEach(storage.setCookie)
+        XCTAssertEqual(storage.cookies(for: url)?.count, 2)
+        XCTAssertTrue((storage.cookies(for: URL(string: "https://child.files.example.com/protected/download")!) ?? []).isEmpty)
+        XCTAssertTrue((storage.cookies(for: URL(string: "http://files.example.com/protected/download")!) ?? []).isEmpty)
+        XCTAssertEqual(cookies.first(where: { $0.name == "session" })?.value, "fixture==")
+    }
     private func makeEngine(root: URL? = nil) -> FetchDockTransferEngine {
         let root = root ?? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         return FetchDockTransferEngine(identifier: UUID().uuidString, root: root, output: root.appendingPathComponent("Files"), configuration: .ephemeral)
