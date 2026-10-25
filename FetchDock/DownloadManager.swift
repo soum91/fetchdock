@@ -9,6 +9,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     static let parallelSessionIdentifier = "com.soum91.fetchdock.parallel.v1"
     @Published private(set) var items: [DownloadItem] = []
     @Published var notice: String?
+    @Published var showAddDownload = false
     @Published private(set) var restoring = true
     let live = LiveActivityController()
     var backgroundCompletion: (() -> Void)?
@@ -225,6 +226,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     @discardableResult
     func save() -> Bool {
+        QueueWidgetSnapshot.publish(items)
         do {
             let data = try JSONEncoder().encode(items)
             try data.write(to: root.appendingPathComponent("downloads.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])

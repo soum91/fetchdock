@@ -72,6 +72,9 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $adding) { AddDownloadView() }
+        .onReceive(manager.$showAddDownload) { requested in
+            if requested { adding = true; manager.showAddDownload = false }
+        }
         .sheet(item: $preview) { file in FilePreview(url: file.url).ignoresSafeArea() }
         .sheet(item: $sharing) { file in ShareSheet(url: file.url) }
         .confirmationDialog("Delete \(deleting?.filename ?? "download")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {

@@ -6,20 +6,22 @@ options:
 settings:
   base:
     SWIFT_VERSION: '5.0'
-    MARKETING_VERSION: '1.1.0'
+    MARKETING_VERSION: 1.1.0
     CURRENT_PROJECT_VERSION: '1'
-    TARGETED_DEVICE_FAMILY: '1,2'
-    CODE_SIGNING_ALLOWED: NO
-    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    TARGETED_DEVICE_FAMILY: 1,2
+    CODE_SIGNING_ALLOWED: false
+    ENABLE_USER_SCRIPT_SANDBOXING: true
 targets:
   FetchDock:
     type: application
     platform: iOS
-    sources: [FetchDock, Shared]
+    sources:
+    - FetchDock
+    - Shared
     dependencies:
-      - target: FetchDockActivity
-      - target: FetchDockShare
-      - target: FetchDockSafari
+    - target: FetchDockActivity
+    - target: FetchDockShare
+    - target: FetchDockSafari
     info:
       path: FetchDock/Info.plist
       properties:
@@ -31,10 +33,14 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UILaunchScreen: {}
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations:
+        - UIInterfaceOrientationPortrait
+        - UIInterfaceOrientationLandscapeLeft
+        - UIInterfaceOrientationLandscapeRight
         CFBundleURLTypes:
-          - CFBundleURLName: com.soum91.fetchdock
-            CFBundleURLSchemes: [fetchdock]
+        - CFBundleURLName: com.soum91.fetchdock
+          CFBundleURLSchemes:
+          - fetchdock
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
     settings:
@@ -42,10 +48,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: FetchDock/FetchDock.entitlements
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FETCHDOCK_APP
   FetchDockActivity:
     type: app-extension
     platform: iOS
-    sources: [FetchDockActivity, Shared]
+    sources:
+    - FetchDockActivity
+    - Shared
     info:
       path: FetchDockActivity/Info.plist
       properties:
@@ -57,12 +66,20 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.activity
-        SKIP_INSTALL: YES
-        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) FETCHDOCK_WIDGET
+    entitlements:
+      path: FetchDockActivity/FetchDockActivity.entitlements
+      properties:
+        com.apple.security.application-groups:
+        - group.com.soum91.fetchdock
   FetchDockShare:
     type: app-extension
     platform: iOS
-    sources: [FetchDockShare, Shared]
+    sources:
+    - FetchDockShare
+    - Shared
     info:
       path: FetchDockShare/Info.plist
       properties:
@@ -80,15 +97,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.share
         CODE_SIGN_ENTITLEMENTS: FetchDockShare/FetchDockShare.entitlements
-        SKIP_INSTALL: YES
-        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
   FetchDockSafari:
     type: app-extension
     platform: iOS
     sources:
-      - path: FetchDockSafari/SafariWebExtensionHandler.swift
-      - path: FetchDockSafari/Resources
-        buildPhase: resources
+    - path: FetchDockSafari/SafariWebExtensionHandler.swift
+    - path: FetchDockSafari/Resources
+      buildPhase: resources
     info:
       path: FetchDockSafari/Info.plist
       properties:
@@ -101,23 +118,26 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soum91.fetchdock.safari
-        SKIP_INSTALL: YES
-        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
   FetchDockTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: Tests
-        excludes: [server.py, __pycache__]
+    - path: Tests
+      excludes:
+      - server.py
+      - __pycache__
     dependencies:
-      - target: FetchDock
+    - target: FetchDock
     settings:
       base:
-        GENERATE_INFOPLIST_FILE: YES
+        GENERATE_INFOPLIST_FILE: true
 schemes:
   FetchDock:
     build:
       targets:
         FetchDock: all
     test:
-      targets: [FetchDockTests]
+      targets:
+      - FetchDockTests

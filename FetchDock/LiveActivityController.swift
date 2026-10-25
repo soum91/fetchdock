@@ -12,6 +12,7 @@ final class LiveActivityController {
     func finishPendingUpdates() async { await pendingUpdate?.value }
 
     func refresh(_ items: [DownloadItem], force: Bool = false) {
+        QueueWidgetSnapshot.publish(items)
         let active = items.filter { [.running, .queued, .pausing, .paused].contains($0.status) }
         activity = activity ?? Activity<DownloadActivityAttributes>.activities.first
         // Clean up duplicate activities left by interrupted launches.

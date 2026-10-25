@@ -52,6 +52,8 @@ jobs:
             /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.0.${BUILD_NUMBER}" "$EXTENSION/Info.plist"
             if [[ "$EXTENSION" == *FetchDockShare.appex ]]; then
               codesign --force --sign - --timestamp=none --entitlements FetchDockShare/FetchDockShare.entitlements "$EXTENSION"
+            elif [[ "$EXTENSION" == *FetchDockActivity.appex ]]; then
+              codesign --force --sign - --timestamp=none --entitlements FetchDockActivity/FetchDockActivity.entitlements "$EXTENSION"
             else
               codesign --force --sign - --timestamp=none "$EXTENSION"
             fi

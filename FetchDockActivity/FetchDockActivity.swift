@@ -1,12 +1,14 @@
 import WidgetKit
 import SwiftUI
 import ActivityKit
+import AppIntents
 
 @main
 struct FetchDockActivityBundle: WidgetBundle {
-    var body: some Widget { FetchDockActivity() }
+    var body: some Widget { FetchDockActivity(); FetchDockQueueWidget(); FetchDockQueueControl(); FetchDockOpenControl(); FetchDockAddControl() }
 }
 struct FetchDockActivity: Widget {
+    private func queueIntent(_ value: Bool) -> SetQueueRunningIntent { var i = SetQueueRunningIntent(); i.value = value; return i }
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DownloadActivityAttributes.self) { context in
             VStack(alignment: .leading, spacing: 12) {
@@ -16,7 +18,13 @@ struct FetchDockActivity: Widget {
                     Text(context.state.status).font(.caption).foregroundStyle(.secondary)
                     if context.state.activeCount > 1 { Text("+\(context.state.activeCount - 1)").font(.caption.bold()).foregroundStyle(.mint) }
                 }
-                Text(context.state.filename).font(.headline).lineLimit(1)
+                HStack {
+                    Text(context.state.filename).font(.headline).lineLimit(1)
+                    Spacer()
+                    Button(intent: queueIntent(context.state.status == "Paused")) {
+                        Image(systemName: context.state.status == "Paused" ? "play.fill" : "pause.fill")
+                    }.buttonStyle(.plain)
+                }
                 if context.state.expected > 0 { ProgressView(value: context.state.progress).tint(.mint) }
                 HStack {
                     Text(context.state.sizeText)
