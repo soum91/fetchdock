@@ -18,7 +18,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if self.path in ('/segments', '/segments-slow', '/ignore-ranges', '/bad-range', '/changing-etag', '/no-validator'):
+        if self.path in ('/segments', '/segments-auth', '/segments-slow', '/ignore-ranges', '/bad-range', '/changing-etag', '/no-validator'):
             self.serve_segments()
             return
         if self.path == '/redirect-other-host':
@@ -74,6 +74,9 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def serve_segments(self):
+        if self.path == '/segments-auth' and 'user_session=fixture-session' not in self.headers.get('Cookie', ''):
+            self.send_error(404)
+            return
         size = len(PAYLOAD)
         ranged = self.headers.get('Range') and self.path != '/ignore-ranges'
         first, last = 0, size - 1

@@ -40,7 +40,7 @@ final class ParallelTransferTests: XCTestCase {
     }
     func testSegmentsOverlapAndAssembleExactFile() async throws {
         let engine = makeEngine()
-        let id = engine.start(url: URL(string: "http://127.0.0.1:8765/segments")!, filename: "file", connections: 4)
+        let id = engine.start(url: URL(string: "http://127.0.0.1:8765/segments-auth")!, filename: "file", headers: ["Cookie": "user_session=fixture-session"], connections: 4)
         let item = try await terminal(engine, id)
         XCTAssertEqual(item.state, .completed, item.error ?? "")
         XCTAssertEqual(item.mode, .segmented)
@@ -48,7 +48,7 @@ final class ParallelTransferTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: engine.fileURL(item)), expectedBytes())
         let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:8765/segment-stats")!)
         let stats = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: [String: Int]])
-        XCTAssertGreaterThanOrEqual(stats["/segments"]?["peak"] ?? 0, 2, "There must be real overlapping range requests")
+        XCTAssertGreaterThanOrEqual(stats["/segments-auth"]?["peak"] ?? 0, 2, "There must be real overlapping authenticated range requests")
         engine.remove(id)
     }
     func testUnsafeOrUnsupportedRangesFallBackWithoutCorruptingFile() async throws {

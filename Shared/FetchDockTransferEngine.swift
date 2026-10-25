@@ -24,6 +24,9 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     private var tasks: [Int: URLSessionDownloadTask] = [:]
     private var samples: [UUID: (Date, Int64)] = [:]
     private var lastEmissions: [UUID: Date] = [:]
+    private let assemblyQueue = DispatchQueue(label: "FetchDock.Assembly", qos: .utility)
+    private var assembling: [UUID: UUID] = [:]
+    private var backgroundEventsFinished = false
     private var ready = false
     private var connecting = false
     private var cookieStorage: HTTPCookieStorage?
@@ -233,38 +236,55 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
         records[id] = t; try save(); try? FileManager.default.removeItem(at: directory(id)); emit(id)
     }
     private func assemble(_ id: UUID) {
-        guard let t = records[id], t.state == .running else { return }
-        let merged = directory(id).appendingPathComponent("merged")
-        do {
-            guard let writer = OutputStream(url: merged, append: false) else { throw URLError(.cannotWriteToFile) }
-            writer.open()
-            defer { writer.close() }
-            var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
-            for index in t.parts.indices {
-                let file = partURL(id, index)
-                let expected = t.parts[index].last - t.parts[index].first + 1
-                guard (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value == expected else { throw URLError(.cannotDecodeContentData) }
-                guard let reader = InputStream(url: file) else { throw URLError(.cannotOpenFile) }
-                reader.open()
-                defer { reader.close() }
-                while true {
-                    let count = reader.read(&buffer, maxLength: buffer.count)
-                    if count < 0 { throw reader.streamError ?? URLError(.cannotOpenFile) }
-                    if count == 0 { break }
-                    try buffer.withUnsafeBufferPointer { bytes in
-                        var offset = 0
-                        while offset < count {
-                            let written = writer.write(bytes.baseAddress!.advanced(by: offset), maxLength: count - offset)
-                            if written <= 0 { throw writer.streamError ?? URLError(.cannotWriteToFile) }
-                            offset += written
+        guard let t = records[id], t.state == .running, assembling[id] != t.generation else { return }
+        assembling[id] = t.generation
+        let merged = directory(id).appendingPathComponent("merged-" + t.generation.uuidString)
+        let files = t.parts.indices.map { partURL(id, $0) }
+        assemblyQueue.async {
+            let result: Result<URL, Error>
+            do {
+                guard let writer = OutputStream(url: merged, append: false) else { throw URLError(.cannotWriteToFile) }
+                writer.open()
+                defer { writer.close() }
+                var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
+                for index in t.parts.indices {
+                    let file = files[index]
+                    let expected = t.parts[index].last - t.parts[index].first + 1
+                    guard (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value == expected else { throw URLError(.cannotDecodeContentData) }
+                    guard let reader = InputStream(url: file) else { throw URLError(.cannotOpenFile) }
+                    reader.open()
+                    defer { reader.close() }
+                    while true {
+                        let stillActive = self.queue.sync { self.records[id]?.generation == t.generation && self.records[id]?.state == .running }
+                        if !stillActive { throw URLError(.cancelled) }
+                        let count = reader.read(&buffer, maxLength: buffer.count)
+                        if count < 0 { throw reader.streamError ?? URLError(.cannotOpenFile) }
+                        if count == 0 { break }
+                        try buffer.withUnsafeBufferPointer { bytes in
+                            var offset = 0
+                            while offset < count {
+                                let written = writer.write(bytes.baseAddress!.advanced(by: offset), maxLength: count - offset)
+                                if written <= 0 { throw writer.streamError ?? URLError(.cannotWriteToFile) }
+                                offset += written
+                            }
                         }
                     }
                 }
+                writer.close()
+                guard (try FileManager.default.attributesOfItem(atPath: merged.path)[.size] as? NSNumber)?.int64Value == t.expected else { throw URLError(.cannotDecodeContentData) }
+                result = .success(merged)
+            } catch { result = .failure(error) }
+            self.queue.async {
+                if self.assembling[id] == t.generation { self.assembling.removeValue(forKey: id) }
+                defer { self.completeBackgroundEventsIfReady() }
+                guard self.records[id]?.generation == t.generation, self.records[id]?.state == .running else {
+                    try? FileManager.default.removeItem(at: merged)
+                    return
+                }
+                do { try self.finish(id, location: result.get()) }
+                catch { self.fail(id, "Could not join download segments: \(error.localizedDescription)") }
             }
-            writer.close()
-            guard (try FileManager.default.attributesOfItem(atPath: merged.path)[.size] as? NSNumber)?.int64Value == t.expected else { throw URLError(.cannotDecodeContentData) }
-            try finish(id, location: merged)
-        } catch { fail(id, "Could not join download segments: \(error.localizedDescription)") }
+        }
     }
     static func contentRange(_ response: HTTPURLResponse) -> (Int64, Int64, Int64)? {
         guard let header = response.value(forHTTPHeaderField: "Content-Range"), header.hasPrefix("bytes ") else { return nil }
@@ -345,6 +365,14 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     }
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         try? save()
+        backgroundEventsFinished = true
+        completeBackgroundEventsIfReady()
+    }
+    private func completeBackgroundEventsIfReady() {
+        guard backgroundEventsFinished, assembling.isEmpty else { return }
+        backgroundEventsFinished = false
+        // Keep iOS's background delivery grant until assembly and the durable
+        // completion ledger are finished, then let app observers flush their UI.
         DispatchQueue.main.async { [weak self] in let done = self?.backgroundCompletion; self?.backgroundCompletion = nil; done?() }
     }
 }
