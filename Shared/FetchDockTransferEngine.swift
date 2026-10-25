@@ -25,6 +25,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     private var samples: [UUID: (Date, Int64)] = [:]
     private var ready = false
     private var connecting = false
+    private var cookieStorage: HTTPCookieStorage?
     private lazy var session: URLSession = {
         let config = configuration ?? URLSessionConfiguration.background(withIdentifier: identifier)
         config.isDiscretionary = false
@@ -32,6 +33,9 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
         config.httpMaximumConnectionsPerHost = 8
         config.timeoutIntervalForResource = 7 * 86400
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpShouldSetCookies = true
+        if config.httpCookieStorage == nil { config.httpCookieStorage = .shared }
+        cookieStorage = config.httpCookieStorage
         let delegates = OperationQueue()
         delegates.maxConcurrentOperationCount = 1
         delegates.underlyingQueue = queue
@@ -151,10 +155,27 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
         let target = transfer.resolvedURL ?? transfer.url
         var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
         request.allowsCellularAccess = transfer.allowsCellular
+        request.mainDocumentURL = target
+        request.httpShouldHandleCookies = true
         for (name, value) in transfer.headers {
             let key = name.lowercased()
             if ["range", "if-range", "accept-encoding", "host", "content-length"].contains(key) { continue }
             if ["cookie", "authorization", "referer"].contains(key) && (target.scheme != transfer.url.scheme || target.host != transfer.url.host || target.port != transfer.url.port) { continue }
+            if key == "cookie" {
+                // Let the system cookie jar apply host/path/secure rules at every
+                // redirect, including in background sessions (which cannot veto
+                // redirects). A manual Cookie header would follow other hosts.
+                for entry in value.split(separator: ";") {
+                    let fields = entry.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                    guard fields.count == 2, let host = target.host else { continue }
+                    let name = fields[0].trimmingCharacters(in: .whitespaces)
+                    let cookiePath = name.hasPrefix("__Host-") ? "/" : (target.path.isEmpty ? "/" : target.path)
+                    var properties: [HTTPCookiePropertyKey: Any] = [.name: name, .value: String(fields[1]).trimmingCharacters(in: .whitespaces), .domain: host, .path: cookiePath]
+                    if target.scheme == "https" { properties[.secure] = "TRUE" }
+                    if let cookie = HTTPCookie(properties: properties) { cookieStorage?.setCookie(cookie) }
+                }
+                continue
+            }
             request.setValue(value, forHTTPHeaderField: name)
         }
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
