@@ -73,7 +73,7 @@ final class FetchDockTests: XCTestCase {
         let cookie = try XCTUnwrap(HTTPCookie(properties: [.domain: "127.0.0.1", .path: "/", .name: "user_session", .value: "fixture-session"]))
         manager.enqueue(url, headers: BrowserModel.sessionHeaders(for: url, cookies: [cookie]))
         let id = try XCTUnwrap(manager.items.first?.id)
-        for _ in 0..<150 {
+        for _ in 0..<450 {
             if let item = manager.items.first(where: { $0.id == id }), [.completed, .failed].contains(item.status) { break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }

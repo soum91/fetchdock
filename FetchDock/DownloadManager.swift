@@ -61,7 +61,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                 items = try JSONDecoder().decode([DownloadItem].self, from: Data(contentsOf: root.appendingPathComponent("downloads.json")))
             }
         } catch { notice = "Could not restore downloads: \(error.localizedDescription)" }
-        parallel = FetchDockTransferEngine(identifier: Self.parallelSessionIdentifier, root: root.appendingPathComponent("Parallel"), output: root.appendingPathComponent("ParallelFiles"), configuration: sessionConfiguration == nil ? nil : .default)
+        parallel = FetchDockTransferEngine(identifier: Self.parallelSessionIdentifier, root: root.appendingPathComponent("Parallel"), output: root.appendingPathComponent("ParallelFiles"), configuration: sessionConfiguration == nil ? nil : .ephemeral)
         parallel.onChange = { [weak self] transfer in self?.importParallelTransfer(transfer) }
         for transfer in parallel.snapshots() { importParallelTransfer(transfer) }
         if configurationOverride == nil {

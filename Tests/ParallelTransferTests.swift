@@ -2,6 +2,18 @@ import XCTest
 @testable import FetchDock
 
 final class ParallelTransferTests: XCTestCase {
+    func testRangeValidationAndLargePartitionArithmetic() throws {
+        for value in ["bytes -0-0/100", "bytes 0-100/100", "bytes 0-0/*", "bytes 0-0/999999999999999999999999", "bytes +0-0/100"] {
+            let response = HTTPURLResponse(url: URL(string: "https://example.com/file")!, statusCode: 206, httpVersion: nil, headerFields: ["Content-Range": value])!
+            XCTAssertNil(FetchDockTransferEngine.contentRange(response), value)
+        }
+        let parts = FetchDockTransferEngine.partitions(total: Int64.max, count: 8)
+        XCTAssertEqual(parts.count, 8)
+        XCTAssertEqual(parts.first?.first, 0)
+        XCTAssertEqual(parts.last?.last, Int64.max - 1)
+        for index in 1..<parts.count { XCTAssertEqual(parts[index].first, parts[index - 1].last + 1) }
+        XCTAssertEqual(parts.reduce(Int64(0)) { $0 + ($1.last - $1.first + 1) }, Int64.max)
+    }
     private func makeEngine(root: URL? = nil) -> FetchDockTransferEngine {
         let root = root ?? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         return FetchDockTransferEngine(identifier: UUID().uuidString, root: root, output: root.appendingPathComponent("Files"), configuration: .ephemeral)
@@ -73,9 +85,10 @@ final class ParallelTransferTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: engine.fileURL(cancelled).path))
         engine.remove(id); engine.remove(slow)
     }
-    func testBackgroundSessionKeepsRedirectAuthenticationScoped() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let engine = FetchDockTransferEngine(identifier: "com.soum91.fetchdock.tests.\(UUID().uuidString)", root: root, output: root.appendingPathComponent("Files"))
+    func testRedirectAuthenticationRemainsScoped() async throws {
+        // Unsigned simulator hosts cannot talk to nsurlsessiond. Exercise the
+        // exact request/redirect path with an isolated foreground transport.
+        let engine = makeEngine()
         let id = engine.start(url: URL(string: "http://127.0.0.1:8765/redirect-other-host")!, filename: "file", headers: ["Cookie": "user_session=fixture-session"])
         let item = try await terminal(engine, id)
         XCTAssertEqual(item.state, .completed, item.error ?? "")

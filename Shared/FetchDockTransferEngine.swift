@@ -206,28 +206,56 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     private func assemble(_ id: UUID) {
         guard let t = records[id], t.state == .running else { return }
         let merged = directory(id).appendingPathComponent("merged")
-        FileManager.default.createFile(atPath: merged.path, contents: nil)
         do {
-            let writer = try FileHandle(forWritingTo: merged)
-            defer { try? writer.close() }
+            guard let writer = OutputStream(url: merged, append: false) else { throw URLError(.cannotWriteToFile) }
+            writer.open()
+            defer { writer.close() }
+            var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
             for index in t.parts.indices {
                 let file = partURL(id, index)
                 let expected = t.parts[index].last - t.parts[index].first + 1
                 guard (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value == expected else { throw URLError(.cannotDecodeContentData) }
-                let reader = try FileHandle(forReadingFrom: file)
-                defer { try? reader.close() }
-                while let data = try reader.read(upToCount: 1024 * 1024), !data.isEmpty { try writer.write(contentsOf: data) }
+                guard let reader = InputStream(url: file) else { throw URLError(.cannotOpenFile) }
+                reader.open()
+                defer { reader.close() }
+                while true {
+                    let count = reader.read(&buffer, maxLength: buffer.count)
+                    if count < 0 { throw reader.streamError ?? URLError(.cannotOpenFile) }
+                    if count == 0 { break }
+                    try buffer.withUnsafeBufferPointer { bytes in
+                        var offset = 0
+                        while offset < count {
+                            let written = writer.write(bytes.baseAddress!.advanced(by: offset), maxLength: count - offset)
+                            if written <= 0 { throw writer.streamError ?? URLError(.cannotWriteToFile) }
+                            offset += written
+                        }
+                    }
+                }
             }
-            try writer.synchronize()
+            writer.close()
             guard (try FileManager.default.attributesOfItem(atPath: merged.path)[.size] as? NSNumber)?.int64Value == t.expected else { throw URLError(.cannotDecodeContentData) }
             try finish(id, location: merged)
         } catch { fail(id, "Could not join download segments: \(error.localizedDescription)") }
     }
     static func contentRange(_ response: HTTPURLResponse) -> (Int64, Int64, Int64)? {
         guard let header = response.value(forHTTPHeaderField: "Content-Range"), header.hasPrefix("bytes ") else { return nil }
-        let values = header.dropFirst(6).split(whereSeparator: { $0 == "-" || $0 == "/" })
+        let fields = header.dropFirst(6).split(separator: "/", omittingEmptySubsequences: false)
+        guard fields.count == 2 else { return nil }
+        let bounds = fields[0].split(separator: "-", omittingEmptySubsequences: false)
+        guard bounds.count == 2 else { return nil }
+        let values = [bounds[0], bounds[1], fields[1]]
+        guard values.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ "0123456789".contains($0) }) }) else { return nil }
         guard values.count == 3, let start = Int64(values[0]), let end = Int64(values[1]), let total = Int64(values[2]), start >= 0, end >= start, total > end else { return nil }
         return (start, end, total)
+    }
+    static func partitions(total: Int64, count: Int) -> [Part] {
+        guard total > 0, count >= 1, count <= 8, total >= Int64(count) else { return [] }
+        let width = total / Int64(count), remainder = total % Int64(count)
+        return (0..<count).map { index in
+            let i = Int64(index)
+            let first = i * width + min(i, remainder)
+            return Part(first: first, last: first + width - 1 + (i < remainder ? 1 : 0))
+        }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let (id, generation, index) = tag(downloadTask), var t = records[id], t.generation == generation, t.state == .running else { return }
@@ -253,8 +281,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
                       let etag = response.value(forHTTPHeaderField: "ETag"), etag.hasPrefix("\""), etag.hasSuffix("\"") else { fallback(id); return }
                 guard let target = response.url, Self.allowed(target) else { fail(id, "Unsupported download redirect."); return }
                 t.resolvedURL = target; t.expected = range.2; t.validator = etag; t.mode = .segmented
-                let count = Int64(t.connections)
-                t.parts = (0..<t.connections).map { i in Part(first: Int64(i) * range.2 / count, last: Int64(i + 1) * range.2 / count - 1) }
+                t.parts = Self.partitions(total: range.2, count: t.connections)
                 t.received = 0; records[id] = t; try save(); schedule(id); emit(id); return
             }
             guard index >= 0 else { fail(id, "Server returned an unexpected partial response."); return }
@@ -269,7 +296,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     }
     private func updateProgress(_ id: UUID) {
         guard var t = records[id] else { return }
-        let completed = t.parts.filter { $0.complete }.reduce(Int64(0)) { $0 + $1.last - $1.first + 1 }
+        let completed = t.parts.filter { $0.complete }.reduce(Int64(0)) { $0 + ($1.last - $1.first + 1) }
         let active = tasks.values.filter { tag($0)?.0 == id }.reduce(Int64(0)) { $0 + max(0, $1.countOfBytesReceived) }
         t.received = completed + active
         if let sample = samples[id], Date().timeIntervalSince(sample.0) >= 0.8 {
@@ -279,7 +306,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let (id, generation, _) = tag(downloadTask), var t = records[id], t.generation == generation, t.state == .running else { return }
-        if t.mode == .single && totalBytesExpectedToWrite > 0 { t.expected = totalBytesExpectedToWrite; records[id] = t }
+        if t.mode != .segmented && totalBytesExpectedToWrite > 1 { t.expected = totalBytesExpectedToWrite; records[id] = t }
         updateProgress(id)
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
