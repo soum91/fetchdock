@@ -6,6 +6,7 @@ import UIKit
 final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDelegate {
     static let shared = DownloadManager()
     static let sessionIdentifier = "com.soum91.fetchdock.transfers.v1"
+    static let parallelSessionIdentifier = "com.soum91.fetchdock.parallel.v1"
     @Published private(set) var items: [DownloadItem] = []
     @Published var notice: String?
     @Published private(set) var restoring = true
@@ -18,6 +19,11 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     private let configurationOverride: URLSessionConfiguration?
     private let root: URL
     private let downloads: URL
+    private(set) var parallel: FetchDockTransferEngine!
+    var connectionsPerFile: Int {
+        let value = UserDefaults.standard.integer(forKey: "connectionsPerFile")
+        return value == 0 ? 4 : min(8, max(1, value))
+    }
     private lazy var session: URLSession = {
         let config = configurationOverride ?? URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         config.isDiscretionary = false
@@ -55,13 +61,16 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                 items = try JSONDecoder().decode([DownloadItem].self, from: Data(contentsOf: root.appendingPathComponent("downloads.json")))
             }
         } catch { notice = "Could not restore downloads: \(error.localizedDescription)" }
+        parallel = FetchDockTransferEngine(identifier: Self.parallelSessionIdentifier, root: root.appendingPathComponent("Parallel"), output: root.appendingPathComponent("ParallelFiles"), configuration: sessionConfiguration == nil ? nil : .default)
+        parallel.onChange = { [weak self] transfer in self?.importParallelTransfer(transfer) }
+        for transfer in parallel.snapshots() { importParallelTransfer(transfer) }
         if configurationOverride == nil {
             SharedTransferCoordinator.shared.onChange = { [weak self] in self?.importSharedTransfers() }
         }
         reconcile()
     }
 
-    func connect() { _ = session }
+    func connect() { _ = session; parallel.connect() }
     func reconcile() {
         if configurationOverride == nil {
             importSharedTransfers()
@@ -92,6 +101,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                     if download.state == .suspended { download.resume() }
                 }
                 for index in self.items.indices where self.tasks[self.items[index].id] == nil && self.items[index].sharedSessionID == nil {
+                    if self.items[index].usesParallelEngine == true { continue }
                     if self.items[index].status == .running { self.items[index].status = .queued }
                     if self.items[index].status == .pausing { self.items[index].status = .paused }
                 }
@@ -117,16 +127,25 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
             notice = "Use an HTTPS link for remote file downloads. HTTP pages can still open in Browser."
             return
         }
-        items.insert(DownloadItem(url: url, filename: DownloadItem.safeName(url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent), headers: headers), at: 0)
+        var item = DownloadItem(url: url, filename: DownloadItem.safeName(url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent), headers: headers)
+        item.usesParallelEngine = true
+        items.insert(item, at: 0)
         save()
         schedule()
         live.refresh(items, force: true)
     }
     func schedule() {
         guard !restoring else { return }
-        var slots = maxConcurrent - tasks.count - items.filter { $0.sharedSessionID != nil && $0.status == .running }.count
+        var slots = maxConcurrent - tasks.count - items.filter { ($0.sharedSessionID != nil || $0.usesParallelEngine == true) && $0.status == .running }.count
         for index in items.indices.reversed() where slots > 0 && items[index].status == .queued {
             let item = items[index]
+            if item.usesParallelEngine == true {
+                items[index].status = .running
+                if parallel.contains(item.id) { parallel.resume(item.id) }
+                else { parallel.start(id: item.id, url: item.url, filename: item.filename, headers: item.headers, connections: connectionsPerFile, allowsCellular: allowsCellular) }
+                slots -= 1
+                continue
+            }
             let task: URLSessionDownloadTask
             if let data = try? Data(contentsOf: resumeURL(item.id)), !data.isEmpty {
                 task = session.downloadTask(withResumeData: data)
@@ -150,6 +169,11 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     }
     func pause(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        if items[index].usesParallelEngine == true {
+            if items[index].status == .queued { items[index].status = .paused; save(); live.refresh(items, force: true) }
+            else { parallel.pause(id) }
+            return
+        }
         if items[index].sharedSessionID != nil { SharedTransferCoordinator.shared.pause(id); return }
         guard let task = tasks[id] else {
             if items[index].status == .queued { items[index].status = .paused; save(); live.refresh(items, force: true) }
@@ -184,6 +208,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     func pauseAll() { for item in items where [.running, .queued].contains(item.status) { pause(item.id) } }
     func resumeAll() { for item in items where [.paused, .failed].contains(item.status) { resume(item.id) } }
     func remove(_ id: UUID) {
+        if items.first(where: { $0.id == id })?.usesParallelEngine == true { parallel.remove(id) }
         if items.first(where: { $0.id == id })?.sharedSessionID != nil { SharedTransferCoordinator.shared.remove(id) }
         tasks.removeValue(forKey: id)?.cancel()
         if let item = items.first(where: { $0.id == id }), let file = fileURL(item) { try? FileManager.default.removeItem(at: file) }
@@ -210,6 +235,32 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     func settingsChanged() {
         UserDefaults(suiteName: ShareStore.groupID)?.set(allowsCellular, forKey: "allowsCellular")
         schedule(); live.refresh(items, force: true)
+    }
+    private func importParallelTransfer(_ transfer: FetchDockTransferEngine.Transfer) {
+        guard let index = items.firstIndex(where: { $0.id == transfer.id }), items[index].usesParallelEngine == true else { return }
+        if items[index].status == .completed { return }
+        items[index].filename = transfer.filename
+        items[index].received = transfer.received; items[index].expected = transfer.expected
+        items[index].speed = transfer.speed; items[index].error = transfer.error
+        items[index].connections = transfer.mode == .segmented ? transfer.parts.count : 1
+        switch transfer.state {
+        case .running: items[index].status = .running
+        case .paused: items[index].status = .paused
+        case .failed, .cancelled: items[index].status = .failed
+        case .completed:
+            do {
+                let name = transfer.id.uuidString + "-" + DownloadItem.safeName(transfer.filename)
+                let destination = downloads.appendingPathComponent(name)
+                if !FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.copyItem(at: parallel.fileURL(transfer), to: destination)
+                }
+                items[index].relativePath = name; items[index].status = .completed; items[index].headers = [:]
+                if save() { parallel.remove(transfer.id) }
+            } catch { items[index].status = .failed; items[index].error = error.localizedDescription }
+        }
+        if Date().timeIntervalSince(lastSave) >= 3 || transfer.state != .running { save() }
+        live.refresh(items, force: transfer.state != .running)
+        if transfer.state != .running { schedule() }
     }
     func importSharedTransfers() {
         let coordinator = SharedTransferCoordinator.shared

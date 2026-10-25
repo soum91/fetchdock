@@ -143,6 +143,9 @@ private struct DownloadRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.filename).font(.subheadline.weight(.semibold)).lineLimit(2)
                     Text(item.url.host ?? "Download").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if let count = item.connections, count > 1 {
+                        Text("FetchDock • \(count) connections").font(.caption2).foregroundStyle(.mint)
+                    }
                 }
                 Spacer(minLength: 2)
                 if item.status == .running || item.status == .queued {
@@ -231,11 +234,14 @@ struct SettingsView: View {
     @AppStorage("liveActivities") private var liveActivities = true
     @AppStorage("allowsCellular") private var cellular = true
     @AppStorage("concurrentDownloads") private var concurrent = 3
+    @AppStorage("connectionsPerFile") private var connections = 4
     var body: some View {
         NavigationStack {
             Form {
                 Section("Transfers") {
                     Stepper("Simultaneous downloads: \(concurrent)", value: $concurrent, in: 1...6)
+                    Stepper("Connections per file: \(connections)", value: $connections, in: 1...8)
+                    Text("Splits supported files into parallel segments. Servers must support byte ranges and provide a strong file validator; otherwise FetchDock uses one connection.").font(.caption).foregroundStyle(.secondary)
                     Toggle("Allow cellular for new downloads", isOn: $cellular)
                     Text("Pause and retry a transfer to apply a new cellular preference. Resume data may retain the original network policy.").font(.caption).foregroundStyle(.secondary)
                 }
@@ -259,7 +265,7 @@ struct SettingsView: View {
                 }.font(.footnote)
                 Section("FetchDock") {
                     LabeledContent("Version", value: "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"))")
-                    Text("Background transfers use iOS URLSession. Force-quitting FetchDock cancels background transfers until you reopen it. Resume support depends on the download server. This build uses one connection per file.").font(.caption).foregroundStyle(.secondary)
+                    Text("Background transfers use iOS URLSession. Force-quitting FetchDock cancels background transfers until you reopen it. Segmented transfers keep completed chunks when paused; unfinished chunks restart on resume. Share-sheet transfers currently use one connection.").font(.caption).foregroundStyle(.secondary)
                 }
             }.navigationTitle("Settings")
                 .onChange(of: liveActivities) { _ in manager.settingsChanged() }

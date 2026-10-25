@@ -1,3 +1,11 @@
+FetchDock: segmented parallel transfers.
+
+- Four connections per supported file by default; choose 1 through 8 in Settings independently of the number of simultaneous files.
+- Validates exact Content-Range, byte counts, identity encoding and strong ETag before joining chunks. Unsupported ranges, changed validators and bad range replies fall back to a fresh single connection.
+- Completed segments survive pause and restart. Unfinished segments restart when resumed.
+- Segments use system background URLSession downloads; assembly streams to disk.
+- Existing queues, browser sessions, Live Activities and single-connection share-sheet transfers remain supported.
+
 FetchDock 1.1: browser session handling across websites.
 
 - Address-bar navigation and Reload establish the destination's first-party context. WebKit uses its persistent cookie store for each request and redirect, including HTTP-only login cookies.
