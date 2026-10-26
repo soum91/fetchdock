@@ -30,16 +30,33 @@ final class ShareViewController: UIViewController {
         }
         var seen = Set<String>()
         links = links.filter { seen.insert($0.absoluteString).inserted }
-        let host = UIHostingController(rootView: ShareDownloadView(links: links, finish: { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) }))
+        let host = UIHostingController(rootView: ShareDownloadView(
+            links: links,
+            finish: { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) },
+            openInApp: { [weak self] urls in self?.openInFetchDock(urls) }
+        ))
         addChild(host); view.addSubview(host.view); host.view.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor), host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor), host.view.topAnchor.constraint(equalTo: view.topAnchor), host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
         host.didMove(toParent: self)
+    }
+
+    private func openInFetchDock(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        var components = URLComponents()
+        components.scheme = "fetchdock"
+        components.host = "add"
+        components.queryItems = [URLQueryItem(name: "url", value: urls.map(\\.absoluteString).joined(separator: "\\n"))]
+        guard let url = components.url else { return }
+        extensionContext?.open(url) { [weak self] _ in
+            self?.extensionContext?.completeRequest(returningItems: nil)
+        }
     }
 }
 
 private struct ShareDownloadView: View {
     let links: [URL]
     let finish: () -> Void
+    let openInApp: ([URL]) -> Void
     @State private var selected = Set<URL>()
     @State private var message: String?
     @State private var started = false
@@ -51,7 +68,7 @@ private struct ShareDownloadView: View {
                     Text("Choose direct file links. Sharing a normal page downloads its HTML. Signed-in browser cookies aren't included.").font(.footnote).foregroundStyle(.secondary)
                 }
                 if links.isEmpty { Text("No HTTPS download links were shared. In your browser, long-press the file link and choose Share.") }
-                ForEach(links, id: \.self) { url in
+                ForEach(links, id: \\.self) { url in
                     Button {
                         if selected.contains(url) { selected.remove(url) } else { selected.insert(url) }
                     } label: {
@@ -75,10 +92,17 @@ private struct ShareDownloadView: View {
         }.tint(.mint).preferredColorScheme(.dark)
     }
     private func start() {
+        let selectedLinks = links.filter { selected.contains($0) }
+        if (try? ShareStore.appGroup()) == nil {
+            openInApp(selectedLinks)
+            started = true
+            message = "Opened FetchDock. The download will continue in the app."
+            return
+        }
         var count = 0
         do {
-            for url in links where selected.contains(url) { try SharedTransferCoordinator.shared.start(url); count += 1 }
-            started = true; message = "Started \(count) download(s)."
-        } catch { message = (count > 0 ? "Started \(count). " : "") + error.localizedDescription }
+            for url in selectedLinks { try SharedTransferCoordinator.shared.start(url); count += 1 }
+            started = true; message = "Started \\(count) download(s)."
+        } catch { message = (count > 0 ? "Started \\(count). " : "") + error.localizedDescription }
     }
 }
