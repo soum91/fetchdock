@@ -45,7 +45,7 @@ final class ShareViewController: UIViewController {
         var components = URLComponents()
         components.scheme = "fetchdock"
         components.host = "add"
-        components.queryItems = [URLQueryItem(name: "url", value: urls.map(\\.absoluteString).joined(separator: "\\n"))]
+        components.queryItems = [URLQueryItem(name: "url", value: urls.map(\.absoluteString).joined(separator: "\n"))]
         guard let url = components.url else { return }
         extensionContext?.open(url) { [weak self] _ in
             self?.extensionContext?.completeRequest(returningItems: nil)
@@ -68,7 +68,7 @@ private struct ShareDownloadView: View {
                     Text("Choose direct file links. Sharing a normal page downloads its HTML. Signed-in browser cookies aren't included.").font(.footnote).foregroundStyle(.secondary)
                 }
                 if links.isEmpty { Text("No HTTPS download links were shared. In your browser, long-press the file link and choose Share.") }
-                ForEach(links, id: \\.self) { url in
+                ForEach(links, id: \.self) { url in
                     Button {
                         if selected.contains(url) { selected.remove(url) } else { selected.insert(url) }
                     } label: {
@@ -102,7 +102,7 @@ private struct ShareDownloadView: View {
         var count = 0
         do {
             for url in selectedLinks { try SharedTransferCoordinator.shared.start(url); count += 1 }
-            started = true; message = "Started \\(count) download(s)."
-        } catch { message = (count > 0 ? "Started \\(count). " : "") + error.localizedDescription }
+            started = true; message = "Started \(count) download(s)."
+        } catch { message = (count > 0 ? "Started \(count). " : "") + error.localizedDescription }
     }
 }
