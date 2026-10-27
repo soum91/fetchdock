@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import AppIntents
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
@@ -45,33 +44,5 @@ struct FetchDockApp: App {
                     else { manager.save() }
                 }
         }
-    }
-}
-
-
-/// App-only queue toggle for Apple's visible Control Center Shortcut control.
-struct ToggleDownloadQueueShortcutIntent: AppIntent {
-    static var title: LocalizedStringResource = "Toggle Download Queue"
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        let manager = DownloadManager.shared
-        let active = manager.items.contains { $0.status == .running || $0.status == .queued }
-        if active { manager.pauseAll() } else { manager.resumeAll() }
-        manager.save()
-        await manager.live.finishPendingUpdates()
-        return .result()
-    }
-}
-struct FetchDockShortcuts: AppShortcutsProvider {
-    static var shortcutTileColor: ShortcutTileColor = .teal
-
-    static var appShortcuts: [AppShortcut] {
-        AppShortcut(intent: ToggleDownloadQueueShortcutIntent(), phrases: [
-            "Toggle downloads in \(.applicationName)",
-        ], shortTitle: "Downloads", systemImageName: "arrow.down.circle.fill")
-        AppShortcut(intent: AddFetchDockIntent(), phrases: [
-            "Add a download in \(.applicationName)",
-        ], shortTitle: "Add Download", systemImageName: "plus.circle.fill")
     }
 }
