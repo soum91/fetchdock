@@ -60,7 +60,8 @@ struct ContentView: View {
                     }
                 }
             }.tabItem { Label("Downloads", systemImage: "arrow.down.circle") }.tag(0)
-            BrowserView().tabItem { Label("Browser", systemImage: "globe") }.tag(1)
+            UploadView().tabItem { Label("Uploads", systemImage: "arrow.up.circle") }.tag(1)
+            BrowserView().tabItem { Label("Browser", systemImage: "globe") }.tag(2)
             SettingsView().tabItem { Label("Settings", systemImage: "slider.horizontal.3") }.tag(2)
         }
         .onOpenURL { url in

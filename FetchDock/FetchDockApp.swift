@@ -4,6 +4,16 @@ import UIKit
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
+        if identifier == DownloadManager.uploadSessionIdentifier {
+            DownloadManager.shared.uploader.backgroundCompletion = {
+                Task { @MainActor in
+                    await DownloadManager.shared.live.finishPendingUpdates()
+                    completionHandler()
+                }
+            }
+            DownloadManager.shared.uploader.connect()
+            return
+        }
         if identifier == DownloadManager.parallelSessionIdentifier {
             DownloadManager.shared.parallel.backgroundCompletion = {
                 Task { @MainActor in

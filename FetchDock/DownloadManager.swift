@@ -7,7 +7,9 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     static let shared = DownloadManager()
     static let sessionIdentifier = "com.soum91.fetchdock.transfers.v1"
     static let parallelSessionIdentifier = "com.soum91.fetchdock.parallel.v1"
+    static let uploadSessionIdentifier = FetchDockUploadEngine.sessionIdentifier
     @Published private(set) var items: [DownloadItem] = []
+    @Published private(set) var uploadItems: [FetchDockUploadEngine.Upload] = []
     @Published var notice: String?
     @Published var showAddDownload = false
     @Published private(set) var restoring = true
@@ -21,6 +23,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
     private let root: URL
     private let downloads: URL
     private(set) var parallel: FetchDockTransferEngine!
+    private(set) var uploader: FetchDockUploadEngine!
     var connectionsPerFile: Int {
         let value = UserDefaults.standard.integer(forKey: "connectionsPerFile")
         return value == 0 ? 4 : min(8, max(1, value))
@@ -65,13 +68,33 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         parallel = FetchDockTransferEngine(identifier: Self.parallelSessionIdentifier, root: root.appendingPathComponent("Parallel"), output: root.appendingPathComponent("ParallelFiles"), configuration: sessionConfiguration == nil ? nil : .ephemeral)
         parallel.onChange = { [weak self] transfer in self?.importParallelTransfer(transfer) }
         for transfer in parallel.snapshots() { importParallelTransfer(transfer) }
+        uploader = FetchDockUploadEngine(root: root.appendingPathComponent("Uploads"), configuration: sessionConfiguration == nil ? nil : .ephemeral)
+        uploadItems = uploader.items
+        uploader.onChange = { [weak self] item in
+            guard let self else { return }
+            self.uploadItems = self.uploader.items
+            self.notice = item.state == .failed ? item.error : nil
+        }
         if configurationOverride == nil {
             SharedTransferCoordinator.shared.onChange = { [weak self] in self?.importSharedTransfers() }
         }
         reconcile()
     }
 
-    func connect() { _ = session; parallel.connect() }
+    func connect() { _ = session; parallel.connect(); uploader.connect() }
+    func startUpload(file: URL, destination: URL) {
+        do {
+            _ = try uploader.start(file: file, destination: destination)
+            uploadItems = uploader.items
+        } catch {
+            notice = "Could not start upload: \(error.localizedDescription)"
+        }
+    }
+
+    func pauseUpload(_ id: UUID) { uploader.pause(id); uploadItems = uploader.items }
+    func resumeUpload(_ id: UUID) { uploader.resume(id); uploadItems = uploader.items }
+    func cancelUpload(_ id: UUID) { uploader.cancel(id); uploadItems = uploader.items }
+
     func reconcile() {
         if configurationOverride == nil {
             importSharedTransfers()
