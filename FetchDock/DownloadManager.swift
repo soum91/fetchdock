@@ -151,7 +151,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
             notice = "Use an HTTPS link for remote file downloads. HTTP pages can still open in Browser."
             return
         }
-        var item = DownloadItem(url: url, filename: DownloadItem.safeName(url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent), headers: headers)
+        var item = DownloadItem(url: url, filename: DownloadItem.preferredName(url.lastPathComponent, url), headers: headers)
         item.usesParallelEngine = true
         items.insert(item, at: 0)
         save()
