@@ -19,7 +19,6 @@ struct DownloadItem: Codable, Identifiable {
     var connections: Int?
     var error: String?
     var headers: [String: String] = [:]
-    // Ephemeral values deliberately excluded from persistence.
     var speed: Double = 0
     var progress: Double { expected > 0 ? min(1, max(0, Double(received) / Double(expected))) : 0 }
     var remaining: String? {
@@ -37,9 +36,21 @@ struct DownloadItem: Codable, Identifiable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return clean.isEmpty || clean == "." || clean == ".." ? "Download" : String(clean.prefix(180))
     }
+    static func preferredName(_ proposed: String, url: URL) -> String {
+        let candidate = proposed.removingPercentEncoding ?? proposed
+        let compact = candidate.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "")
+        let hex = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
+        let opaque = compact.count >= 24 && compact.unicodeScalars.allSatisfy { hex.contains($0) }
+        if opaque {
+            let pathName = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+            if !pathName.isEmpty && !pathName.hasPrefix(".") && pathName != candidate {
+                return safeName(pathName)
+            }
+        }
+        return safeName(candidate)
+    }
     static func canDownload(_ url: URL) -> Bool {
         if url.scheme?.lowercased() == "https" { return true }
-        // Loopback is useful for local tools and integration tests; other remote files require TLS.
         return url.scheme?.lowercased() == "http" && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
     }
     static func parseURL(_ input: String) -> URL? {
