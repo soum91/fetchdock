@@ -93,7 +93,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
     func start(id: UUID = UUID(), url: URL, filename: String, headers: [String: String] = [:], connections: Int = 4, allowsCellular: Bool = true) -> UUID {
         queue.sync {
             guard records[id] == nil else { return }
-            var transfer = Transfer(id: id, url: url, filename: Self.safeName(filename), headers: headers, connections: min(8, max(1, connections)))
+            var transfer = Transfer(id: id, url: url, filename: DownloadItem.preferredName(filename, url: url), headers: headers, connections: min(8, max(1, connections)))
             transfer.allowsCellular = allowsCellular
             if !Self.allowed(url) { transfer.state = .failed; transfer.error = "Remote downloads require HTTPS." }
             if transfer.connections == 1 { transfer.mode = .single }
@@ -311,7 +311,7 @@ final class FetchDockTransferEngine: NSObject, URLSessionDownloadDelegate {
         tasks.removeValue(forKey: downloadTask.taskIdentifier)
         guard let response = downloadTask.response as? HTTPURLResponse else { fail(id, "No HTTP response."); return }
         do {
-            if let name = response.suggestedFilename, index < 0 { t.filename = Self.safeName(name) }
+            if let name = response.suggestedFilename, index < 0 { t.filename = DownloadItem.preferredName(name, url: t.resolvedURL ?? t.url) }
             if response.statusCode == 200 {
                 if index >= 0 { fallback(id); return }
                 t.mode = .single; t.connections = 1
