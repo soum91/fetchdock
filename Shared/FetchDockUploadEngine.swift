@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class FetchDockUploadEngine: NSObject, ObservableObject, URLSessionUploadDelegate, URLSessionDataDelegate {
+final class FetchDockUploadEngine: NSObject, ObservableObject, URLSessionDataDelegate {
     static let sessionIdentifier = "com.soum91.fetchdock.uploads.v1"
     enum State: String, Codable { case queued, running, paused, failed, completed, cancelled }
     struct Upload: Codable, Identifiable {
