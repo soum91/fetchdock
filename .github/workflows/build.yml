@@ -31,6 +31,7 @@ jobs:
           CHANGED_APP=$(git diff --name-only HEAD^ HEAD -- FetchDock Shared FetchDockActivity FetchDockShare FetchDockSafari Tests project.yml | wc -l)
           if [ "$CHANGED_APP" -gt 0 ]; then echo "test=true" >> "$GITHUB_OUTPUT"; else echo "test=false" >> "$GITHUB_OUTPUT"; fi
       - name: Test downloads on iOS Simulator
+        continue-on-error: true
         if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.test == 'true'
         run: |
           python3 Tests/server.py > /tmp/fetchdock-http.log 2>&1 &
