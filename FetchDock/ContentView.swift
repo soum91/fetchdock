@@ -38,7 +38,7 @@ struct ContentView: View {
                                         pause: { manager.pause(item.id) }, resume: { manager.resume(item.id) },
                                         open: { if let url = manager.fileURL(item) { preview = PreviewFile(url: url) } },
                                         share: { if let url = manager.fileURL(item) { sharing = PreviewFile(url: url) } },
-                                        delete: { deleting = item },\n                                        tap: { handleTap(item) })
+                                        delete: { deleting = item }, tap: { handleTap(item) })
                                 }
                             }
                         }
