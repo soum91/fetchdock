@@ -86,6 +86,13 @@ struct ContentView: View {
         .alert("FetchDock", isPresented: Binding(get: { manager.notice != nil }, set: { if !$0 { manager.notice = nil } })) {
             Button("OK") { manager.notice = nil }
         } message: { Text(manager.notice ?? "") }
+        .confirmationDialog("What do you want to do with \(actionItem?.filename ?? "this file")?", isPresented: Binding(get: { actionItem != nil }, set: { if !$0 { actionItem = nil } }), titleVisibility: .visible) {
+            if let item = actionItem, let url = manager.fileURL(item) {
+                Button("Open or Share…") { sharing = PreviewFile(url: url); actionItem = nil }
+                Button("Save to Files") { sharing = PreviewFile(url: url); actionItem = nil }
+            }
+            Button("Cancel", role: .cancel) { actionItem = nil }
+        }
     }
     private func handleTap(_ item: DownloadItem) {
         guard item.status == .completed, let url = manager.fileURL(item) else { return }
@@ -139,6 +146,7 @@ private struct DownloadRow: View {
     let open: () -> Void
     let share: () -> Void
     let delete: () -> Void
+    let tap: () -> Void
     private var symbol: String {
         switch item.url.pathExtension.lowercased() {
         case "mp4", "mkv", "mov", "webm": return "film"
