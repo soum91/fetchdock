@@ -325,6 +325,37 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         if save() { finished.forEach { coordinator.forgetCompleted($0) } }
         schedule(); live.refresh(items, force: true)
     }
+    private func readableDestinationName(_ filename: String, excluding: String? = nil) -> String {
+        let base = DownloadItem.safeName(filename)
+        let ext = (base as NSString).pathExtension
+        let stem = ext.isEmpty ? base : String(base.dropLast(ext.count + 1))
+        var candidate = base
+        var number = 2
+        while FileManager.default.fileExists(atPath: downloads.appendingPathComponent(candidate).path) && candidate != excluding {
+            candidate = ext.isEmpty ? "\(stem) (\(number))" : "\(stem) (\(number)).\(ext)"
+            number += 1
+        }
+        return candidate
+    }
+
+    private func migrateReadableFiles() {
+        for index in items.indices {
+            guard let relative = items[index].relativePath else { continue }
+            let oldName = (relative as NSString).lastPathComponent
+            let prefix = items[index].id.uuidString + "-"
+            guard oldName.hasPrefix(prefix) else { continue }
+            let oldURL = downloads.appendingPathComponent(oldName)
+            guard FileManager.default.fileExists(atPath: oldURL.path) else { continue }
+            let newName = readableDestinationName(items[index].filename, excluding: oldName)
+            let newURL = downloads.appendingPathComponent(newName)
+            do {
+                if newName != oldName { try FileManager.default.moveItem(at: oldURL, to: newURL) }
+                items[index].relativePath = newName
+            } catch { notice = "Could not rename \(items[index].filename): \(error.localizedDescription)" }
+        }
+        _ = save()
+    }
+
     private func resumeURL(_ id: UUID) -> URL { root.appendingPathComponent(id.uuidString + ".resume") }
     private func persistResume(_ data: Data, id: UUID) {
         do { try data.write(to: resumeURL(id), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
