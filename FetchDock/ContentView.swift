@@ -38,7 +38,7 @@ struct ContentView: View {
                                         pause: { manager.pause(item.id) }, resume: { manager.resume(item.id) },
                                         open: { if let url = manager.fileURL(item) { preview = PreviewFile(url: url) } },
                                         share: { if let url = manager.fileURL(item) { sharing = PreviewFile(url: url) } },
-                                        delete: { deleting = item })
+                                        delete: { deleting = item },\n                                        tap: { handleTap(item) })
                                 }
                             }
                         }
@@ -87,6 +87,15 @@ struct ContentView: View {
             Button("OK") { manager.notice = nil }
         } message: { Text(manager.notice ?? "") }
     }
+    private func handleTap(_ item: DownloadItem) {
+        guard item.status == .completed, let url = manager.fileURL(item) else { return }
+        if QLPreviewController.canPreview(url as NSURL) {
+            preview = PreviewFile(url: url)
+        } else {
+            actionItem = item
+        }
+    }
+
     private var summary: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -173,7 +182,7 @@ private struct DownloadRow: View {
             }.font(.caption2.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
             if let error = item.error { Text(error).font(.caption).foregroundStyle(.orange).textSelection(.enabled) }
         }
-        .padding(16).background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
+        .padding(16).contentShape(RoundedRectangle(cornerRadius: 20)).onTapGesture(perform: tap).background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
         .contextMenu {
             if item.status == .completed { Button("Open", systemImage: "doc", action: open); Button("Share / Save to Files", systemImage: "square.and.arrow.up", action: share) }
             if [.running, .queued].contains(item.status) { Button("Pause", systemImage: "pause", action: pause) }
