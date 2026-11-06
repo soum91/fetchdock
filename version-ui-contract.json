@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "name": "iOS app",
+      "evidence": [
+        {
+          "path": "FetchDock/ContentView.swift",
+          "contains": [
+            "LabeledContent(\"Version\"",
+            "CFBundleShortVersionString",
+            "CFBundleVersion"
+          ]
+        }
+      ]
+    }
+  ]
+}
