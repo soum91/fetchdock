@@ -65,6 +65,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
                 items = try JSONDecoder().decode([DownloadItem].self, from: Data(contentsOf: root.appendingPathComponent("downloads.json")))
             }
         } catch { notice = "Could not restore downloads: \(error.localizedDescription)" }
+        migrateReadableFiles()
         parallel = FetchDockTransferEngine(identifier: Self.parallelSessionIdentifier, root: root.appendingPathComponent("Parallel"), output: root.appendingPathComponent("ParallelFiles"), configuration: sessionConfiguration == nil ? nil : .ephemeral)
         parallel.onChange = { [weak self] transfer in self?.importParallelTransfer(transfer) }
         for transfer in parallel.snapshots() { importParallelTransfer(transfer) }
@@ -274,7 +275,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         case .failed, .cancelled: items[index].status = .failed
         case .completed:
             do {
-                let name = transfer.id.uuidString + "-" + DownloadItem.safeName(transfer.filename)
+                let name = readableDestinationName(transfer.filename)
                 let destination = downloads.appendingPathComponent(name)
                 if !FileManager.default.fileExists(atPath: destination.path) {
                     try FileManager.default.copyItem(at: parallel.fileURL(transfer), to: destination)
@@ -308,7 +309,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
             items[index].received = record.received; items[index].expected = record.expected
             items[index].speed = record.speed; items[index].error = record.error
             if record.status == .completed, let file = record.file {
-                let name = record.id.uuidString + "-" + DownloadItem.safeName(record.filename)
+                let name = readableDestinationName(record.filename)
                 let destination = downloads.appendingPathComponent(name)
                 do {
                     if !FileManager.default.fileExists(atPath: destination.path) {
@@ -343,7 +344,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
             guard let relative = items[index].relativePath else { continue }
             let oldName = (relative as NSString).lastPathComponent
             let prefix = items[index].id.uuidString + "-"
-            guard oldName.hasPrefix(prefix) else { continue }
+            guard oldName.hasPrefix(prefix) || oldName.hasPrefix(String(items[index].id.uuidString.prefix(8)) + "-") else { continue }
             let oldURL = downloads.appendingPathComponent(oldName)
             guard FileManager.default.fileExists(atPath: oldURL.path) else { continue }
             let newName = readableDestinationName(items[index].filename, excluding: oldName)
@@ -405,7 +406,7 @@ final class DownloadManager: NSObject, ObservableObject, URLSessionDownloadDeleg
         }
         do {
             let name = DownloadItem.safeName(downloadTask.response?.suggestedFilename ?? items[index].filename)
-            let path = String(id.uuidString.prefix(8)) + "-" + name
+            let path = readableDestinationName(name)
             let destination = downloads.appendingPathComponent(path)
             if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
             // Move the temporary file before this delegate callback returns.

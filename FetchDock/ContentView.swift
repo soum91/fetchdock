@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var preview: PreviewFile?
     @State private var sharing: PreviewFile?
+    @State private var actionItem: DownloadItem?
     @State private var deleting: DownloadItem?
     private let ink = Color(red: 0.04, green: 0.08, blue: 0.12)
     private var filtered: [DownloadItem] {

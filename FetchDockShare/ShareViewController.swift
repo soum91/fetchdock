@@ -3,7 +3,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class ShareViewController: UIViewController {
+final class ShareViewController: UIViewController, UIDocumentPickerDelegate {
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        extensionContext?.completeRequest(returningItems: nil)
+    }
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        extensionContext?.completeRequest(returningItems: nil)
+    }
     private var loaded = false
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -40,15 +46,32 @@ final class ShareViewController: UIViewController {
         host.didMove(toParent: self)
     }
 
+    // A share extension cannot reliably launch its containing app. When signing
+    // removes App Groups, download in this process and export through Files.
     private func openInFetchDock(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        var components = URLComponents()
-        components.scheme = "fetchdock"
-        components.host = "add"
-        components.queryItems = [URLQueryItem(name: "url", value: urls.map(\.absoluteString).joined(separator: "\n"))]
-        guard let url = components.url else { return }
-        extensionContext?.open(url) { [weak self] _ in
-            self?.extensionContext?.completeRequest(returningItems: nil)
+        Task {
+            do {
+                var files: [URL] = []
+                for url in urls {
+                    let (temporary, response) = try await URLSession.shared.download(from: url)
+                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                        throw URLError(.badServerResponse)
+                    }
+                    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let name = DownloadItem.safeName(response.suggestedFilename ?? url.lastPathComponent)
+                    let file = directory.appendingPathComponent(name)
+                    try FileManager.default.moveItem(at: temporary, to: file)
+                    files.append(file)
+                }
+                let picker = UIDocumentPickerViewController(forExporting: files, asCopy: true)
+                picker.delegate = self
+                self.present(picker, animated: true)
+            } catch {
+                let alert = UIAlertController(title: "Download failed", message: error.localizedDescription + " Close this sheet and retry, or paste the link into FetchDock.", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
+            }
         }
     }
 }
@@ -96,7 +119,7 @@ private struct ShareDownloadView: View {
         if (try? ShareStore.appGroup()) == nil {
             openInApp(selectedLinks)
             started = true
-            message = "Opened FetchDock. The download will continue in the app."
+            message = "Downloading here because shared storage is unavailable. Keep this sheet open; Files will ask where to save the downloaded file."
             return
         }
         var count = 0
